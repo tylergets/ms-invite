@@ -181,7 +181,12 @@ curl --fail-with-body https://invite.example.com/api/invites \
 ```
 
 Returns HTTP 201 with `{"invite": {...}, "url": "https://.../invite/..."}`.
-Expiry defaults to seven days; accepted values are 1–8760 hours.
+Expiry defaults to seven days; accepted values are 1–8760 hours, or `0` for
+**never expires**. Non-expiring invitations return `"expires_at": null`. They
+remain single-use and can be revoked. In the admin page, choose **Never expires**
+when creating a link, or use **Revoke link** in its Actions column to cancel it.
+Accepted invitations cannot be revoked; manage those accounts in Jellyfin and
+Authentik instead.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |

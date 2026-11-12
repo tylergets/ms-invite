@@ -115,7 +115,7 @@ func (a *app) admin(api bool, next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (a *app) adminPage(w http.ResponseWriter, r *http.Request) {
-	render(w, "admin.html", pageData{Title: "Invite someone in", Invites: a.store.list()})
+	render(w, "admin.html", pageData{Title: "Invitations", Invites: a.store.list()})
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -151,11 +151,16 @@ func (a *app) createInvite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		input.Label = r.PostForm.Get("label")
-		input.ExpiresInHours, _ = strconv.Atoi(r.PostForm.Get("expires_in_hours"))
+		hours, err := strconv.Atoi(r.PostForm.Get("expires_in_hours"))
+		if err != nil {
+			http.Error(w, "choose an invitation expiry", http.StatusBadRequest)
+			return
+		}
+		input.ExpiresInHours = hours
 	}
 	input.Label = strings.TrimSpace(input.Label)
-	if len(input.Label) > 120 || input.ExpiresInHours < 1 || input.ExpiresInHours > 8760 {
-		http.Error(w, "label must be at most 120 bytes; expiry must be 1–8760 hours", http.StatusBadRequest)
+	if len(input.Label) > 120 || input.ExpiresInHours < 0 || input.ExpiresInHours > 8760 {
+		http.Error(w, "label must be at most 120 bytes; expiry must be 0 (never) or 1–8760 hours", http.StatusBadRequest)
 		return
 	}
 	i, token, err := a.store.create(input.Label, time.Duration(input.ExpiresInHours)*time.Hour)
@@ -172,7 +177,7 @@ func (a *app) createInvite(w http.ResponseWriter, r *http.Request) {
 		}{i, link})
 		return
 	}
-	render(w, "admin.html", pageData{Title: "Your invite is ready", Link: link, Invites: a.store.list()})
+	render(w, "admin.html", pageData{Title: "Invitation created", Link: link, Invites: a.store.list()})
 }
 
 func (a *app) revokeInvite(w http.ResponseWriter, r *http.Request) {
@@ -199,10 +204,10 @@ func (a *app) invitePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if i.Creating != "" {
-		render(w, "message.html", pageData{Title: "We need a hand", Message: errAttention.Error()})
+		render(w, "message.html", pageData{Title: "Signup needs a review", Message: errAttention.Error()})
 		return
 	}
-	render(w, "invite.html", pageData{Title: "Your next movie night starts here", Invite: i})
+	render(w, "invite.html", pageData{Title: "Create your account", Invite: i})
 }
 
 func (a *app) accept(w http.ResponseWriter, r *http.Request) {
@@ -240,9 +245,9 @@ func (a *app) accept(w http.ResponseWriter, r *http.Request) {
 		i.Username, i.Email = username, email
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusBadRequest)
-		render(w, "invite.html", pageData{Title: "Let's try that again", Error: err.Error(), Invite: i})
+		render(w, "invite.html", pageData{Title: "Check your details", Error: err.Error(), Invite: i})
 		return
 	}
 	// A refresh cannot resubmit credentials or reuse the capability.
-	render(w, "message.html", pageData{Title: "You're in", Message: "Your Jellyfin and Authentik accounts are ready. Sign in with the username and password you just chose."})
+	render(w, "message.html", pageData{Title: "Your account is ready.", Message: "Your Jellyfin and Authentik accounts are ready. Sign in with the username and password you just chose."})
 }

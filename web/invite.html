@@ -1,22 +1,42 @@
 {{template "head" .}}
-<main class="card">
-  <p class="eyebrow">MEDIA SERVER · AN INVITATION</p>
-  <h1>{{.Title}}</h1>
-  <p>One signup. Your own account in Jellyfin and Authentik.</p>
-  {{if .Error}}<p class="notice error" role="alert">{{.Error}}</p>{{end}}
-  <form method="post">
-    <label for="username">Username</label>
-    <input id="username" name="username" value="{{.Invite.Username}}" autocomplete="username" pattern="[a-z0-9][a-z0-9_.\-]{2,31}" minlength="3" maxlength="32" required>
-    <small>3–32 lowercase letters, numbers, dots, underscores, or hyphens.</small>
-    <label for="email">Email address</label>
-    <input id="email" name="email" type="email" value="{{.Invite.Email}}" autocomplete="email" maxlength="254" required>
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
-    <small>At least 12 characters. Used for both accounts.</small>
-    <label for="password_confirm">Confirm password</label>
-    <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
-    <button type="submit">Create my accounts <span aria-hidden="true">↗</span></button>
-  </form>
-  <p class="fine">This invitation is single-use. Account creation may take a moment.</p>
+<main id="main" class="signup-layout">
+  <div class="signup-intro">
+    <p class="section-label">Your invitation</p>
+    <h1>Create your account.</h1>
+    <p class="intro-copy">A single signup for your media library and club services.</p>
+    <dl class="service-list">
+      <div><dt>Jellyfin</dt><dd>Your movies, shows, and more.</dd></div>
+      <div><dt>Authentik</dt><dd>Your sign-in for club services.</dd></div>
+    </dl>
+    <p class="invitation-expiry">{{if .Invite.ExpiresAt}}Accept by <time datetime="{{.Invite.ExpiresAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.Invite.ExpiresAt.Format "January 2, 2006 at 15:04"}} UTC</time>.{{else}}This invitation does not expire.{{end}}</p>
+  </div>
+
+  <section class="signup-form-section" aria-labelledby="account-heading">
+    <h2 id="account-heading">Account details</h2>
+    <p class="form-intro">Use the same username and password for both services.</p>
+    {{if .Error}}<div class="notice notice-error" role="alert"><h3>Check your details</h3><p>{{.Error}}</p></div>{{end}}
+    <form method="post" class="signup-form">
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" value="{{.Invite.Username}}" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9_.\-]{2,31}" minlength="3" maxlength="32" aria-describedby="username-hint" required>
+        <small id="username-hint">3–32 lowercase letters, numbers, dots, underscores, or hyphens.</small>
+      </div>
+      <div class="field">
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" value="{{.Invite.Email}}" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="password-hint" required>
+        <small id="password-hint">At least 12 characters.</small>
+      </div>
+      <div class="field">
+        <label for="password_confirm">Confirm password</label>
+        <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+      </div>
+      <button type="submit">Create account <span aria-hidden="true">→</span></button>
+    </form>
+    <p class="form-footnote">This link can be used once. Setup may take a moment.</p>
+  </section>
 </main>
 {{template "foot" .}}

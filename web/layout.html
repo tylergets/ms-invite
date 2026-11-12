@@ -1,7 +1,19 @@
 {{define "head"}}<!doctype html>
 <html lang="en"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}} · Media server</title>
+  <meta name="color-scheme" content="light">
+  <title>{{.Title}} · Media library</title>
   <link rel="stylesheet" href="/style.css">
-</head><body><div class="shell">{{end}}
-{{define "foot"}}<footer>A little less setup. A little more cinema.</footer></div></body></html>{{end}}
+</head><body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="wordmark" href="/" aria-label="Media library home">Media<span>library</span></a>
+      <span class="header-section">Invitations</span>
+    </div>
+  </header>
+  <div class="shell">{{end}}
+{{define "foot"}}
+    <footer class="site-footer"><span>Media library</span><span>Powered by Jellyfin &amp; Authentik</span></footer>
+  </div>
+</body></html>{{end}}

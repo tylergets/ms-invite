@@ -301,3 +301,112 @@ func TestPasswordValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestNonExpiringInvitesPersistAndRemainSingleUse(t *testing.T) {
+	a, _ := testApp(t)
+	i, token, err := a.store.create("No deadline", 0)
+	if err != nil || i.ExpiresAt != nil || i.expired(time.Now().AddDate(100, 0, 0)) {
+		t.Fatalf("non-expiring invite: %+v, %v", i, err)
+	}
+	dir := a.store.dir
+	a.store.close()
+	a.store, err = openStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.store.close() })
+	if restored, err := a.store.get(token); err != nil || restored.ExpiresAt != nil {
+		t.Fatalf("non-expiring invite lost on restart: %+v, %v", restored, err)
+	}
+	if rows := a.store.list(); len(rows) != 1 || rows[0].Status != "open" {
+		t.Fatalf("non-expiring invite listed as expired: %+v", rows)
+	}
+	page := httptest.NewRecorder()
+	a.handler().ServeHTTP(page, httptest.NewRequest("GET", "/invite/"+token, nil))
+	if page.Code != 200 || !strings.Contains(page.Body.String(), "does not expire") || !strings.Contains(page.Body.String(), "</html>") {
+		t.Fatal("non-expiring signup page did not render")
+	}
+	if w := signup(a, token); w.Code != 200 {
+		t.Fatalf("non-expiring signup failed: %d %s", w.Code, w.Body.String())
+	}
+	if w := signup(a, token); w.Code != 410 {
+		t.Fatalf("non-expiring invitation reused: %d", w.Code)
+	}
+	if err := a.store.revoke(i.ID); err == nil {
+		t.Fatal("accepted invitation was revoked")
+	}
+
+	i, token, err = a.store.create("Revoke without a deadline", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "/admin/invites/"+i.ID+"/revoke", nil)
+	r.Header.Set("Origin", a.config.BaseURL)
+	r.AddCookie(&http.Cookie{Name: a.cookieName("session"), Value: a.signCookie("session", adminSession{Subject: "admin", Group: a.config.OIDCAdminGroup, Expires: time.Now().Add(time.Hour).Unix()})})
+	w := httptest.NewRecorder()
+	a.handler().ServeHTTP(w, r)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("browser revoke failed: %d", w.Code)
+	}
+	if w := signup(a, token); w.Code != 410 {
+		t.Fatalf("revoked non-expiring invitation accepted: %d", w.Code)
+	}
+}
+
+func TestInvitationExpiryInput(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		browser    bool
+		want       int
+		hours      int
+	}{
+		{"default", `{}`, false, 201, 168},
+		{"never", `{"expires_in_hours":0}`, false, 201, 0},
+		{"timed", `{"expires_in_hours":24}`, false, 201, 24},
+		{"negative", `{"expires_in_hours":-1}`, false, 400, 0},
+		{"too long", `{"expires_in_hours":8761}`, false, 400, 0},
+		{"browser never", "expires_in_hours=0", true, 200, 0},
+		{"browser malformed", "expires_in_hours=invalid", true, 400, 0},
+		{"browser missing", "label=Missing", true, 400, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, _ := testApp(t)
+			path := "/api/invites"
+			if tc.browser {
+				path = "/admin/invites"
+			}
+			r := httptest.NewRequest("POST", path, strings.NewReader(tc.body))
+			r.Header.Set("Authorization", "Bearer "+a.config.AdminToken)
+			if tc.browser {
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.Header.Set("Origin", a.config.BaseURL)
+				r.AddCookie(&http.Cookie{Name: a.cookieName("session"), Value: a.signCookie("session", adminSession{Subject: "admin", Group: a.config.OIDCAdminGroup, Expires: time.Now().Add(time.Hour).Unix()})})
+			}
+			w := httptest.NewRecorder()
+			a.handler().ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("got %d, want %d: %s", w.Code, tc.want, w.Body.String())
+			}
+			rows := a.store.list()
+			if tc.want == 400 {
+				if len(rows) != 0 {
+					t.Fatal("invalid expiry created an invitation")
+				}
+				return
+			}
+			if len(rows) != 1 {
+				t.Fatalf("expected one invitation, got %d", len(rows))
+			}
+			if tc.hours == 0 {
+				if rows[0].ExpiresAt != nil {
+					t.Fatal("never-expiring invitation has an expiry")
+				}
+			} else if rows[0].ExpiresAt == nil || rows[0].ExpiresAt.Sub(rows[0].CreatedAt) != time.Duration(tc.hours)*time.Hour {
+				t.Fatal("incorrect expiry duration")
+			}
+			if tc.browser && (!strings.Contains(w.Body.String(), "Revoke link") || !strings.Contains(w.Body.String(), "</html>")) {
+				t.Fatal("admin page did not render invitation actions")
+			}
+		})
+	}
+}

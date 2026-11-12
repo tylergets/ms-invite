@@ -19,17 +19,17 @@ import (
 var errUnavailable = errors.New("invite is expired, revoked, or already used")
 
 type invite struct {
-	ID          string    `json:"id"`
-	Label       string    `json:"label"`
-	CreatedAt   time.Time `json:"created_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	Status      string    `json:"status"`
-	Username    string    `json:"username,omitempty"`
-	Email       string    `json:"email,omitempty"`
-	AuthentikID int       `json:"authentik_id,omitempty"`
-	JellyfinID  string    `json:"jellyfin_id,omitempty"`
-	Creating    string    `json:"creating,omitempty"`
-	LastError   string    `json:"last_error,omitempty"`
+	ID          string     `json:"id"`
+	Label       string     `json:"label"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+	Status      string     `json:"status"`
+	Username    string     `json:"username,omitempty"`
+	Email       string     `json:"email,omitempty"`
+	AuthentikID int        `json:"authentik_id,omitempty"`
+	JellyfinID  string     `json:"jellyfin_id,omitempty"`
+	Creating    string     `json:"creating,omitempty"`
+	LastError   string     `json:"last_error,omitempty"`
 }
 
 // The small invite ledger is replaced atomically and fsynced on every transition.
@@ -40,6 +40,10 @@ type store struct {
 	lock *os.File
 	rows map[string]invite
 	err  error // Stop mutations after an uncertain disk commit.
+}
+
+func (i invite) expired(now time.Time) bool {
+	return i.ExpiresAt != nil && !now.Before(*i.ExpiresAt)
 }
 
 func openStore(dir string) (*store, error) {
@@ -146,7 +150,11 @@ func (s *store) create(label string, ttl time.Duration) (invite, string, error) 
 		return invite{}, "", err
 	}
 	now := time.Now().UTC()
-	i := invite{ID: id, Label: label, CreatedAt: now, ExpiresAt: now.Add(ttl), Status: "open"}
+	i := invite{ID: id, Label: label, CreatedAt: now, Status: "open"}
+	if ttl != 0 {
+		expires := now.Add(ttl)
+		i.ExpiresAt = &expires
+	}
 	err = s.commit(func(rows map[string]invite) error { rows[digest(token)] = i; return nil })
 	return i, token, err
 }
@@ -158,7 +166,7 @@ func (s *store) get(token string) (invite, error) {
 		return invite{}, s.err
 	}
 	i, ok := s.rows[digest(token)]
-	if !ok || (i.Status != "open" && i.Status != "pending") || !time.Now().Before(i.ExpiresAt) {
+	if !ok || (i.Status != "open" && i.Status != "pending") || i.expired(time.Now()) {
 		return invite{}, errUnavailable
 	}
 	return i, nil
@@ -175,7 +183,7 @@ func (s *store) list() []invite {
 	for _, i := range s.rows {
 		if i.Creating != "" && i.Status == "pending" {
 			i.Status = "needs attention"
-		} else if (i.Status == "open" || i.Status == "pending") && !time.Now().Before(i.ExpiresAt) {
+		} else if (i.Status == "open" || i.Status == "pending") && i.expired(time.Now()) {
 			i.Status = "expired"
 		}
 		rows = append(rows, i)

@@ -483,3 +483,27 @@ func TestAdminHidesRevokedInvitations(t *testing.T) {
 		t.Fatal("revoked history was removed from the API")
 	}
 }
+
+func TestPublicPagesHaveNoAdminChrome(t *testing.T) {
+	a, _ := testApp(t)
+	token := newInvite(t, a)
+	for _, tc := range []struct {
+		path   string
+		status int
+		text   string
+	}{
+		{"/", 200, "No invite found"},
+		{"/invite/invalid", 410, "No invite found"},
+		{"/invite/" + token, 200, "Create your account"},
+	} {
+		w := httptest.NewRecorder()
+		a.handler().ServeHTTP(w, httptest.NewRequest("GET", tc.path, nil))
+		body := w.Body.String()
+		if w.Code != tc.status || !strings.Contains(body, tc.text) || !strings.Contains(body, "</html>") {
+			t.Fatalf("unexpected public page at %s: %d %s", tc.path, w.Code, body)
+		}
+		if strings.Contains(body, "<header") || strings.Contains(body, "<footer") {
+			t.Fatalf("public page includes admin chrome: %s", tc.path)
+		}
+	}
+}

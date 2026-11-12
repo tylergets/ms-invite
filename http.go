@@ -41,7 +41,7 @@ func newApp(c config, s *store) *app {
 func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		render(w, "message.html", pageData{Title: "You're invited", Message: "Ask your media server administrator for an invite link."})
+		render(w, "message.html", pageData{Title: "No invite found"})
 	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /style.css", func(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +76,7 @@ func (a *app) handler() http.Handler {
 
 type pageData struct {
 	Title, Message, Error, Link string
+	Admin                       bool
 	Invite                      invite
 	Signup                      signupAttempt
 	Invites                     []invite
@@ -119,7 +120,7 @@ func (a *app) admin(api bool, next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (a *app) adminPage(w http.ResponseWriter, r *http.Request) {
-	render(w, "admin.html", pageData{Title: "Invitations", Invites: a.adminInvites()})
+	render(w, "admin.html", pageData{Title: "Invitations", Admin: true, Invites: a.adminInvites()})
 }
 
 func (a *app) adminInvites() []invite {
@@ -194,7 +195,7 @@ func (a *app) createInvite(w http.ResponseWriter, r *http.Request) {
 		}{i, link})
 		return
 	}
-	render(w, "admin.html", pageData{Title: "Invitation created", Link: link, Invites: a.adminInvites()})
+	render(w, "admin.html", pageData{Title: "Invitation created", Admin: true, Link: link, Invites: a.adminInvites()})
 }
 
 func (a *app) revokeInvite(w http.ResponseWriter, r *http.Request) {
@@ -217,7 +218,9 @@ func (a *app) revokeInvite(w http.ResponseWriter, r *http.Request) {
 func (a *app) invitePage(w http.ResponseWriter, r *http.Request) {
 	i, err := a.store.get(r.PathValue("token"))
 	if err != nil {
-		http.Error(w, "invite unavailable", http.StatusGone)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusGone)
+		render(w, "message.html", pageData{Title: "No invite found"})
 		return
 	}
 	key := a.signupKey(r, i)
@@ -259,7 +262,9 @@ func (a *app) accept(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	i, err := a.store.get(token)
 	if err != nil {
-		http.Error(w, "invite unavailable", http.StatusGone)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusGone)
+		render(w, "message.html", pageData{Title: "No invite found"})
 		return
 	}
 	username := strings.TrimSpace(r.PostForm.Get("username"))

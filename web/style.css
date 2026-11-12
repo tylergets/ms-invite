@@ -26,6 +26,8 @@ button, a, input, select, summary { -webkit-tap-highlight-color: transparent; }
 .wordmark span { font-weight: 400; }
 .header-section { padding-left: 28px; border-left: 1px solid var(--border); color: var(--muted); font-size: 13px; }
 .shell { min-height: calc(100svh - 81px); display: flex; flex-direction: column; }
+.shell.public-shell { min-height: 100svh; }
+.public-shell .message-layout { margin-block: auto; }
 .site-footer { display: flex; justify-content: space-between; gap: 24px; padding-block: 24px; margin-top: auto; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .site-footer > :first-child { font-weight: 600; }
 

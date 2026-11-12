@@ -6,14 +6,18 @@
   <link rel="stylesheet" href="/style.css">
 </head><body>
   <a class="skip-link" href="#main">Skip to content</a>
+  {{if .Admin}}
   <header class="site-header">
     <div class="header-inner">
       <a class="wordmark" href="/" aria-label="Media library home">Media<span>library</span></a>
       <span class="header-section">Invitations</span>
     </div>
   </header>
-  <div class="shell">{{end}}
+  {{end}}
+  <div class="shell{{if not .Admin}} public-shell{{end}}">{{end}}
 {{define "foot"}}
+    {{if .Admin}}
     <footer class="site-footer"><span>Media library</span><span>Powered by Jellyfin &amp; Authentik</span></footer>
+    {{end}}
   </div>
 </body></html>{{end}}

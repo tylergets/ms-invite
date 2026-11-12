@@ -1,7 +1,6 @@
 {{template "head" .}}
 <main id="main" class="message-layout">
-  <p class="section-label">Media library</p>
   <h1>{{.Title}}</h1>
-  <p class="message-copy">{{.Message}}</p>
+  {{if .Message}}<p class="message-copy">{{.Message}}</p>{{end}}
 </main>
 {{template "foot" .}}

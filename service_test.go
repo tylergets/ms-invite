@@ -447,3 +447,39 @@ func TestInvitationExpiryInput(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminHidesRevokedInvitations(t *testing.T) {
+	a, _ := testApp(t)
+	if _, _, err := a.store.create("Visible invitation", 0, true); err != nil {
+		t.Fatal(err)
+	}
+	revoked, _, err := a.store.create("Revoked invitation hidden", 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.store.revoke(revoked.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/admin", "/admin/invites"} {
+		method, body := "GET", ""
+		if path == "/admin/invites" {
+			method, body = "POST", "label=Another+invitation&expires_in_hours=0&reusable=true"
+		}
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.Header.Set("Origin", a.config.BaseURL)
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.AddCookie(&http.Cookie{Name: a.cookieName("session"), Value: a.signCookie("session", adminSession{Subject: "admin", Group: a.config.OIDCAdminGroup, Expires: time.Now().Add(time.Hour).Unix()})})
+		w := httptest.NewRecorder()
+		a.handler().ServeHTTP(w, r)
+		if w.Code != 200 || strings.Contains(w.Body.String(), revoked.Label) || !strings.Contains(w.Body.String(), "Visible invitation") {
+			t.Fatalf("incorrect admin list at %s: %s", path, w.Body.String())
+		}
+	}
+	r := httptest.NewRequest("GET", "/api/invites", nil)
+	r.Header.Set("Authorization", "Bearer "+a.config.AdminToken)
+	w := httptest.NewRecorder()
+	a.handler().ServeHTTP(w, r)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), revoked.Label) {
+		t.Fatal("revoked history was removed from the API")
+	}
+}

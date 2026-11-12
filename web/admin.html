@@ -42,7 +42,7 @@
 
   <section class="history-section" aria-labelledby="history-heading">
     <div class="section-heading history-heading">
-      <h2 id="history-heading">All invitations <span class="count">{{len .Invites}}</span></h2>
+      <h2 id="history-heading">Invitations <span class="count">{{len .Invites}}</span></h2>
       <span class="table-note">Most recent first</span>
     </div>
     {{if .Invites}}
@@ -81,7 +81,7 @@
       </tbody>
     </table>
     {{else}}
-    <div class="empty-state"><h3>No invitations yet</h3><p>Create your first link above to invite someone to the library.</p></div>
+    <div class="empty-state"><h3>No invitations to show</h3><p>Create a link above to invite someone to the library.</p></div>
     {{end}}
     <p class="section-footnote">Revoking a link prevents signup. Existing accounts are not affected.</p>
   </section>

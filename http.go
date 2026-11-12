@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,7 +119,11 @@ func (a *app) admin(api bool, next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (a *app) adminPage(w http.ResponseWriter, r *http.Request) {
-	render(w, "admin.html", pageData{Title: "Invitations", Invites: a.store.list()})
+	render(w, "admin.html", pageData{Title: "Invitations", Invites: a.adminInvites()})
+}
+
+func (a *app) adminInvites() []invite {
+	return slices.DeleteFunc(a.store.list(), func(i invite) bool { return i.Status == "revoked" })
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -189,7 +194,7 @@ func (a *app) createInvite(w http.ResponseWriter, r *http.Request) {
 		}{i, link})
 		return
 	}
-	render(w, "admin.html", pageData{Title: "Invitation created", Link: link, Invites: a.store.list()})
+	render(w, "admin.html", pageData{Title: "Invitation created", Link: link, Invites: a.adminInvites()})
 }
 
 func (a *app) revokeInvite(w http.ResponseWriter, r *http.Request) {

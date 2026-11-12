@@ -116,7 +116,8 @@ func baseConfigEnv(t *testing.T) {
 		"AUTHENTIK_OIDC_ISSUER":    "https://auth.example.com/application/o/invite/",
 		"AUTHENTIK_OIDC_CLIENT_ID": "invite", "AUTHENTIK_OIDC_CLIENT_SECRET": "oidc-secret",
 		"JELLYFIN_URL": "http://localhost:8096", "JELLYFIN_API_KEY": "jf-key",
-		"AUTHENTIK_URL": "http://localhost:9000", "AUTHENTIK_TOKEN": "ak-key",
+		"JELLYFIN_PUBLIC_URL": "",
+		"AUTHENTIK_URL":       "http://localhost:9000", "AUTHENTIK_TOKEN": "ak-key",
 		"JELLYFIN_ENABLED": "true", "AUTHENTIK_ENABLED": "true",
 		"JELLYFIN_ALLOWED_LIBRARY_IDS": "null", "JELLYFIN_ALLOW_LIVE_TV": "false",
 		"ADMIN_TOKEN_FILE": "", "AUTHENTIK_OIDC_CLIENT_SECRET_FILE": "",
@@ -176,5 +177,51 @@ func TestCrawlerDirectives(t *testing.T) {
 	a.handler().ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
 	if !strings.Contains(w.Header().Get("X-Robots-Tag"), "noindex") || !strings.Contains(w.Body.String(), `name="robots" content="noindex, nofollow, noarchive"`) {
 		t.Fatal("missing indexing directives")
+	}
+}
+
+func TestJellyfinWelcomeInstructions(t *testing.T) {
+	a, _ := testApp(t)
+	a.config.AuthentikEnabled = false
+	a.upstream.config = a.config
+	w := signup(a, newInvite(t, a))
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	for _, text := range []string{`href="https://jellyfin.example.com"`, `value="https://jellyfin.example.com"`, "Open Jellyfin", "Watch on your TV", "Swiftfin", "Quick Connect", "alice"} {
+		if !strings.Contains(w.Body.String(), text) {
+			t.Fatalf("welcome page missing %q", text)
+		}
+	}
+	if strings.Contains(w.Body.String(), a.config.JellyfinURL) || strings.Contains(w.Body.String(), "a good password 123") {
+		t.Fatal("welcome page exposed an internal API address or password")
+	}
+	if strings.Contains(w.Body.String(), "<header") || strings.Contains(w.Body.String(), "<footer") {
+		t.Fatal("welcome page has admin chrome")
+	}
+
+	a, _ = testApp(t)
+	a.config.JellyfinPublicURL = ""
+	w = signup(a, newInvite(t, a))
+	if w.Code != 200 || strings.Contains(w.Body.String(), "Open Jellyfin") || strings.Contains(w.Body.String(), a.config.JellyfinURL) {
+		t.Fatal("missing public URL fell back to an internal address")
+	}
+}
+
+func TestJellyfinPublicURLValidation(t *testing.T) {
+	for _, value := range []string{"javascript:alert(1)", "https://user:password@example.com", "https://jellyfin.example.com/?token=secret"} {
+		t.Run(value, func(t *testing.T) {
+			baseConfigEnv(t)
+			t.Setenv("JELLYFIN_PUBLIC_URL", value)
+			if _, err := loadConfig(); err == nil {
+				t.Fatal("unsafe public URL accepted")
+			}
+		})
+	}
+	baseConfigEnv(t)
+	t.Setenv("JELLYFIN_PUBLIC_URL", "https://jellyfin.example.com")
+	c, err := loadConfig()
+	if err != nil || c.JellyfinPublicURL != "https://jellyfin.example.com" {
+		t.Fatalf("public URL not loaded: %v", err)
 	}
 }

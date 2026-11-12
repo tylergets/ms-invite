@@ -141,7 +141,8 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 	}))
 	t.Cleanup(f.server.Close)
 	c := config{SiteName: "Ragtag Club", JellyfinEnabled: true, AuthentikEnabled: true, BaseURL: "https://invite.example.com", AdminToken: strings.Repeat("a", 32),
-		JellyfinURL: f.server.URL + "/jellyfin", JellyfinKey: "jf-key", AuthentikURL: f.server.URL + "/auth", AuthentikToken: "ak-key",
+		JellyfinPublicURL: "https://jellyfin.example.com",
+		JellyfinURL:       f.server.URL + "/jellyfin", JellyfinKey: "jf-key", AuthentikURL: f.server.URL + "/auth", AuthentikToken: "ak-key",
 		AuthentikPath: "users/media", OIDCAdminGroup: "media-admins"}
 	return newApp(c, testStore(t)), f
 }

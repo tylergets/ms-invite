@@ -138,6 +138,24 @@ small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; l
 .invite-details { display: flex; flex-direction: column; gap: 5px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; font-size: 11px; line-height: 1.5; color: var(--muted); }
 .message-layout { padding-block: 44px; }
 .message-copy { margin: 16px auto 0; font-size: 14px; line-height: 1.7; color: var(--muted); }
+.success-layout { width: min(100%, 560px); }
+.success-mark { color: #9bd6b4; border-color: #365b4b; background: #162b22; }
+.button-link { display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 48px; margin-top: 26px; padding: 12px 18px; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 650; text-decoration: none; }
+.button-link:hover { background: #c2daff; border-color: #c2daff; }
+.login-note { margin-top: 14px; font-size: 13px; }
+.login-note strong, .setup-instructions strong { color: var(--ink); overflow-wrap: anywhere; }
+.setup-instructions { margin-top: 28px; padding-top: 26px; border-top: 1px solid var(--border); text-align: left; }
+.setup-steps { list-style: none; counter-reset: setup; padding: 0; margin: 22px 0 0; }
+.setup-steps > li { counter-increment: setup; position: relative; padding-left: 38px; margin-top: 24px; }
+.setup-steps > li::before { content: counter(setup); position: absolute; left: 0; top: -1px; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid #364e72; border-radius: 50%; background: #1a273b; color: var(--accent); font-size: 11px; font-weight: 600; }
+.setup-steps > li > strong { font-size: 13px; }
+.setup-steps p { margin-top: 7px; font-size: 13px; }
+.setup-steps .setup-hint { font-size: 12px; }
+.setup-instructions a { color: var(--accent); text-underline-offset: 3px; }
+.server-address { margin-top: 12px; font-family: var(--mono); font-size: 12px; }
+.quick-connect { margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--field); font-size: 12px; }
+.quick-connect summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+.quick-connect p { margin-top: 12px; font-size: 12px; }
 
 @media (max-width: 900px) {
   .header-inner, .shell { width: calc(100% - 48px); }

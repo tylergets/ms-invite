@@ -14,6 +14,7 @@ type config struct {
 	JellyfinEnabled, AuthentikEnabled                          bool
 	JellyfinLibraryIDs                                         []string
 	JellyfinLiveTV                                             bool
+	JellyfinPublicURL                                          string
 	SiteName                                                   string
 	Listen, BaseURL, DataDir                                   string
 	AdminToken, JellyfinURL, JellyfinKey                       string
@@ -42,16 +43,17 @@ func secret(key string) (string, error) {
 
 func loadConfig() (config, error) {
 	c := config{
-		SiteName:       env("SITE_NAME", "Media library"),
-		Listen:         env("LISTEN_ADDR", "127.0.0.1:8080"),
-		BaseURL:        strings.TrimRight(os.Getenv("BASE_URL"), "/"),
-		DataDir:        env("DATA_DIR", "./data"),
-		JellyfinURL:    strings.TrimRight(os.Getenv("JELLYFIN_URL"), "/"),
-		AuthentikURL:   strings.TrimRight(os.Getenv("AUTHENTIK_URL"), "/"),
-		AuthentikPath:  env("AUTHENTIK_USER_PATH", "users/media"),
-		OIDCIssuer:     os.Getenv("AUTHENTIK_OIDC_ISSUER"),
-		OIDCClientID:   os.Getenv("AUTHENTIK_OIDC_CLIENT_ID"),
-		OIDCAdminGroup: env("AUTHENTIK_ADMIN_GROUP", "media-admins"),
+		SiteName:          env("SITE_NAME", "Media library"),
+		Listen:            env("LISTEN_ADDR", "127.0.0.1:8080"),
+		BaseURL:           strings.TrimRight(os.Getenv("BASE_URL"), "/"),
+		DataDir:           env("DATA_DIR", "./data"),
+		JellyfinURL:       strings.TrimRight(os.Getenv("JELLYFIN_URL"), "/"),
+		JellyfinPublicURL: strings.TrimRight(os.Getenv("JELLYFIN_PUBLIC_URL"), "/"),
+		AuthentikURL:      strings.TrimRight(os.Getenv("AUTHENTIK_URL"), "/"),
+		AuthentikPath:     env("AUTHENTIK_USER_PATH", "users/media"),
+		OIDCIssuer:        os.Getenv("AUTHENTIK_OIDC_ISSUER"),
+		OIDCClientID:      os.Getenv("AUTHENTIK_OIDC_CLIENT_ID"),
+		OIDCAdminGroup:    env("AUTHENTIK_ADMIN_GROUP", "media-admins"),
 	}
 	for key, dest := range map[string]*bool{"JELLYFIN_ENABLED": &c.JellyfinEnabled, "AUTHENTIK_ENABLED": &c.AuthentikEnabled} {
 		value, err := strconv.ParseBool(env(key, "true"))
@@ -71,6 +73,9 @@ func loadConfig() (config, error) {
 	if c.JellyfinEnabled {
 		secrets["JELLYFIN_API_KEY"] = &c.JellyfinKey
 		urls["JELLYFIN_URL"] = c.JellyfinURL
+		if c.JellyfinPublicURL != "" {
+			urls["JELLYFIN_PUBLIC_URL"] = c.JellyfinPublicURL
+		}
 		if err := json.Unmarshal([]byte(env("JELLYFIN_ALLOWED_LIBRARY_IDS", "null")), &c.JellyfinLibraryIDs); err != nil {
 			return c, fmt.Errorf("JELLYFIN_ALLOWED_LIBRARY_IDS must be a JSON array of library IDs or null")
 		}

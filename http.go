@@ -79,6 +79,7 @@ func (a *app) handler() http.Handler {
 }
 
 type pageData struct {
+	JellyfinPublicURL                 string
 	JellyfinEnabled, AuthentikEnabled bool
 	SiteName                          string
 	Title, Message, Error, Link       string
@@ -91,6 +92,7 @@ type pageData struct {
 func (a *app) render(w http.ResponseWriter, name string, data pageData) {
 	data.SiteName = a.config.SiteName
 	data.JellyfinEnabled = a.config.JellyfinEnabled
+	data.JellyfinPublicURL = a.config.JellyfinPublicURL
 	data.AuthentikEnabled = a.config.AuthentikEnabled
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := pages.ExecuteTemplate(w, name, data); err != nil {
@@ -305,5 +307,5 @@ func (a *app) accept(w http.ResponseWriter, r *http.Request) {
 	} else if !a.config.JellyfinEnabled {
 		message = "Your Authentik account is ready."
 	}
-	a.render(w, "message.html", pageData{Title: "Your account is ready.", Message: message + " Sign in with the username and password you just chose."})
+	a.render(w, "success.html", pageData{Title: "Your account is ready.", Message: message, Signup: signupAttempt{Username: username}})
 }

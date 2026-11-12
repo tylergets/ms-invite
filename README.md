@@ -91,6 +91,7 @@ services.ms-invite = {
   jellyfin = {
     enable = true;
     url = "http://127.0.0.1:8096";
+    publicUrl = "https://jellyfin.example.com";
     apiKeyFile = "/run/secrets/jellyfin-api-key";
     allowedLibraryIds = [ "movies-library-id" "shows-library-id" ];
     allowLiveTv = false;
@@ -129,6 +130,12 @@ timeout. `publicUrl` must exactly match the browser origin and have no path.
 
 `siteName` sets the admin header and browser page titles (`SITE_NAME` outside
 NixOS). Public pages have no header, and no pages include a footer.
+
+Set `jellyfin.publicUrl` (`JELLYFIN_PUBLIC_URL`) to the address your users can
+open in a browser. After successful signup, they see an Open Jellyfin button,
+their username, and TV app setup instructions using that address. This is separate
+from `jellyfin.url`, the internal API address. An empty public URL hides the
+Jellyfin setup guide; it is never shown when Jellyfin provisioning is disabled.
 
 `jellyfin.enable` and `authentik.enable` independently control account provisioning;
 both default to `true`, and at least one must be enabled. Disabled services do not

@@ -74,6 +74,12 @@ in
         example = "http://127.0.0.1:8096";
         description = "Jellyfin API base URL, including any configured base path.";
       };
+      publicUrl = mkOption {
+        type = types.str;
+        default = "";
+        example = "https://jellyfin.example.com";
+        description = "Browser-accessible Jellyfin URL shown with login and TV setup instructions after signup. Empty hides those instructions; never falls back to the internal API URL.";
+      };
       apiKeyFile = mkOption {
         type = types.str;
         description = "Absolute runtime path to the Jellyfin API key.";
@@ -191,6 +197,7 @@ in
       }
       // lib.optionalAttrs cfg.jellyfin.enable {
         JELLYFIN_URL = cfg.jellyfin.url;
+        JELLYFIN_PUBLIC_URL = cfg.jellyfin.publicUrl;
         JELLYFIN_API_KEY_FILE = "%d/jellyfin-api-key";
         JELLYFIN_ALLOWED_LIBRARY_IDS = builtins.toJSON cfg.jellyfin.allowedLibraryIds;
         JELLYFIN_ALLOW_LIVE_TV = lib.boolToString cfg.jellyfin.allowLiveTv;

@@ -1,0 +1,39 @@
+{{template "head" .}}
+<main id="main" class="message-layout success-layout">
+  <div class="invite-mark success-mark" aria-hidden="true"><svg viewBox="0 0 32 32" width="32" height="32" fill="none"><path d="m8 16 5 5L24 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <h1>{{.Title}}</h1>
+  <p class="message-copy">{{.Message}}</p>
+
+  {{if and .JellyfinEnabled .JellyfinPublicURL}}
+  <a class="button-link" href="{{.JellyfinPublicURL}}" target="_blank" rel="noopener noreferrer">Open Jellyfin <span aria-hidden="true">↗</span></a>
+  <p class="login-note">Sign in as <strong>{{.Signup.Username}}</strong> with the password you just created.</p>
+
+  <section class="setup-instructions" aria-labelledby="tv-heading">
+    <h2 id="tv-heading">Watch on your TV</h2>
+    <ol class="setup-steps">
+      <li>
+        <strong>Install the app</strong>
+        <p>Search your TV or streaming device’s app store for <strong>Jellyfin</strong>. On Apple TV, install <strong>Swiftfin</strong>.</p>
+        <p class="setup-hint">Jellyfin apps are available for Google / Android TV, Fire TV, Roku, supported LG webOS TVs, and Samsung Tizen TVs. <a href="https://jellyfin.org/downloads/clients/all/" target="_blank" rel="noopener noreferrer">Find your app</a>.</p>
+      </li>
+      <li>
+        <strong>Add the server</strong>
+        <p>Choose <strong>Add server</strong> or enter the server address manually. Copy the full address exactly as shown below.</p>
+        <label class="sr-only" for="jellyfin-server">Jellyfin server address</label>
+        <input id="jellyfin-server" class="server-address" value="{{.JellyfinPublicURL}}" readonly spellcheck="false">
+      </li>
+      <li>
+        <strong>Sign in and start watching</strong>
+        <p>Choose manual sign-in if your account is not listed. Enter <strong>{{.Signup.Username}}</strong> and the password you just created.</p>
+      </li>
+    </ol>
+    <details class="quick-connect">
+      <summary>TV remote typing too slow?</summary>
+      <p>If the app offers <strong>Quick Connect</strong>, leave its code on the TV. Open Jellyfin on your phone or computer, sign in, then go to <strong>Settings → Quick Connect</strong> and enter that code.</p>
+    </details>
+  </section>
+  {{else}}
+  <p class="login-note">Sign in as <strong>{{.Signup.Username}}</strong> with the password you just created.</p>
+  {{end}}
+</main>
+{{template "foot" .}}

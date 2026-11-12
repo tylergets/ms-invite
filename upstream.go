@@ -46,7 +46,7 @@ func (u *upstream) call(ctx context.Context, system, method, path string, body, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if system == "jellyfin" {
-		req.Header.Set("X-Emby-Token", u.config.JellyfinKey)
+		req.Header.Set("Authorization", fmt.Sprintf("MediaBrowser Token=%q", u.config.JellyfinKey))
 	} else {
 		req.Header.Set("Authorization", "Bearer "+u.config.AuthentikToken)
 	}

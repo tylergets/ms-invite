@@ -44,7 +44,7 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 			if r.Header.Get("Authorization") != "Bearer ak-key" {
 				t.Error("missing Authentik credential")
 			}
-		} else if r.Header.Get("X-Emby-Token") != "jf-key" {
+		} else if r.Header.Get("Authorization") != `MediaBrowser Token="jf-key"` {
 			t.Error("missing Jellyfin credential")
 		}
 		key := r.Method + " " + r.URL.Path

@@ -61,7 +61,9 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("POST /api/invites/{id}/revoke", a.admin(true, a.revokeInvite))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Referrer-Policy", "no-referrer")
+		// no-referrer makes browsers send Origin: null on native form POSTs.
+		// Send only the origin so CSRF checks work without leaking invite paths.
+		w.Header().Set("Referrer-Policy", "strict-origin")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")

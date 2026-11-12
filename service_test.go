@@ -296,6 +296,7 @@ func TestAdminAuthorizationAndCSRF(t *testing.T) {
 		{"api cross origin", "/api/invites", "https://evil.example", a.config.AdminToken, false, 403},
 		{"browser no session", "/admin/invites", a.config.BaseURL, a.config.AdminToken, false, 303},
 		{"browser no origin", "/admin/invites", "", "", true, 403},
+		{"browser null origin", "/admin/invites", "null", "", true, 403},
 		{"browser cross origin", "/admin/invites", "https://evil.example", "", true, 403},
 		{"browser authenticated", "/admin/invites", a.config.BaseURL, "", true, 200},
 	} {

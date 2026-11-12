@@ -90,7 +90,7 @@ func (u *upstream) available(ctx context.Context, username string) error {
 	return nil
 }
 
-func (u *upstream) createAuthentik(ctx context.Context, i invite) (int, error) {
+func (u *upstream) createAuthentik(ctx context.Context, inviteID string, i signupAttempt) (int, error) {
 	var result struct {
 		PK int `json:"pk"`
 	}
@@ -101,7 +101,7 @@ func (u *upstream) createAuthentik(ctx context.Context, i invite) (int, error) {
 	err := u.call(ctx, "authentik", "POST", "/core/users/", map[string]any{
 		"username": i.Username, "name": i.Username, "email": i.Email,
 		"is_active": false, "path": u.config.AuthentikPath, "groups": groups,
-		"type": "internal", "attributes": map[string]string{"ms_invite_id": i.ID},
+		"type": "internal", "attributes": map[string]string{"ms_invite_id": inviteID, "ms_invite_signup_id": i.ID},
 	}, &result)
 	if err == nil && result.PK <= 0 {
 		err = fmt.Errorf("authentik: missing user ID")
@@ -109,7 +109,7 @@ func (u *upstream) createAuthentik(ctx context.Context, i invite) (int, error) {
 	return result.PK, err
 }
 
-func (u *upstream) createJellyfin(ctx context.Context, i invite) (string, error) {
+func (u *upstream) createJellyfin(ctx context.Context, i signupAttempt) (string, error) {
 	// A random bootstrap password ensures a half-created account cannot be used.
 	password, err := randomToken(32)
 	if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -31,11 +32,18 @@ type fakeMedia struct {
 	akActive, jfDisabled   bool
 	fail, taken            string
 	server                 *httptest.Server
+	akNames                map[string]int
+	jfNames                map[string]string
+	akPasswords            map[string]string
+	jfPasswords            map[string]string
 }
 
 func testApp(t *testing.T) (*app, *fakeMedia) {
 	t.Helper()
-	f := &fakeMedia{}
+	f := &fakeMedia{
+		akNames: map[string]int{}, jfNames: map[string]string{},
+		akPasswords: map[string]string{}, jfPasswords: map[string]string{},
+	}
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -53,6 +61,14 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 			http.Error(w, "upstream failed", 503)
 			return
 		}
+		akID := strings.Split(strings.TrimPrefix(r.URL.Path, "/auth/api/v3/core/users/"), "/")[0]
+		jfID := strings.Split(strings.TrimPrefix(r.URL.Path, "/jellyfin/Users/"), "/")[0]
+		if strings.HasPrefix(r.URL.Path, "/auth/api/v3/core/users/") && akID != "" {
+			key = strings.Replace(key, "/users/"+akID, "/users/42", 1)
+		}
+		if strings.HasPrefix(r.URL.Path, "/jellyfin/Users/") && jfID != "New" {
+			key = strings.Replace(key, "/Users/"+jfID, "/Users/jf-user-id", 1)
+		}
 		var body map[string]any
 		if r.Method != "GET" {
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -61,7 +77,7 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 		}
 		switch key {
 		case "GET /auth/api/v3/core/users/":
-			if f.taken == "authentik" {
+			if f.taken == "authentik" || f.akNames[r.URL.Query().Get("username")] != 0 {
 				io.WriteString(w, `{"results":[{"username":"alice"}]}`)
 			} else {
 				io.WriteString(w, `{"results":[]}`)
@@ -70,26 +86,38 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 			if f.taken == "jellyfin" {
 				io.WriteString(w, `[{"Name":"ALICE"}]`)
 			} else {
-				io.WriteString(w, `[]`)
+				users := []map[string]string{}
+				for name := range f.jfNames {
+					users = append(users, map[string]string{"Name": name})
+				}
+				json.NewEncoder(w).Encode(users)
 			}
 		case "POST /auth/api/v3/core/users/":
 			f.akCreated++
-			if body["is_active"] != false || body["username"] != "alice" {
+			if body["is_active"] != false || body["username"] == "" {
 				t.Error("incorrect Authentik create")
 			}
-			io.WriteString(w, `{"pk":42}`)
+			id := 41 + f.akCreated
+			f.akNames[body["username"].(string)] = id
+			json.NewEncoder(w).Encode(map[string]int{"pk": id})
 		case "PATCH /auth/api/v3/core/users/42/":
 			f.akActive = body["is_active"].(bool)
 			io.WriteString(w, `{}`)
 		case "POST /auth/api/v3/core/users/42/set_password/":
 			f.akPassword = body["password"].(string)
+			f.akPasswords[akID] = f.akPassword
 			w.WriteHeader(204)
 		case "POST /jellyfin/Users/New":
 			f.jfCreated++
 			if len(body["Password"].(string)) < 32 {
 				t.Error("missing bootstrap password")
 			}
-			io.WriteString(w, `{"Id":"jf-user-id"}`)
+			id := "jf-user-id"
+			if f.jfCreated > 1 {
+				id = fmt.Sprintf("jf-user-id-%d", f.jfCreated)
+			}
+			f.jfNames[body["Name"].(string)] = id
+			json.NewEncoder(w).Encode(map[string]string{"Id": id})
 		case "GET /jellyfin/Users/jf-user-id":
 			io.WriteString(w, `{"Policy":{"EnableAudioPlaybackTranscoding":true}}`)
 		case "POST /jellyfin/Users/jf-user-id/Policy":
@@ -100,6 +128,7 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 			w.WriteHeader(204)
 		case "POST /jellyfin/Users/jf-user-id/Password":
 			f.jfPassword = body["NewPw"].(string)
+			f.jfPasswords[jfID] = f.jfPassword
 			w.WriteHeader(204)
 		default:
 			t.Errorf("unexpected upstream request: %s", key)
@@ -115,7 +144,7 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 
 func newInvite(t *testing.T, a *app) string {
 	t.Helper()
-	_, token, err := a.store.create("Test invite", time.Hour)
+	_, token, err := a.store.create("Test invite", time.Hour, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,10 +152,17 @@ func newInvite(t *testing.T, a *app) string {
 }
 
 func signup(a *app, token string) *httptest.ResponseRecorder {
-	form := url.Values{"username": {"alice"}, "email": {"alice@example.com"}, "password": {"a good password 123"}, "password_confirm": {"a good password 123"}}
+	return signupWithKey(a, token, "test-browser", "alice", "alice@example.com")
+}
+
+func signupWithKey(a *app, token, key, username, email string) *httptest.ResponseRecorder {
+	form := url.Values{"username": {username}, "email": {email}, "password": {"a good password 123"}, "password_confirm": {"a good password 123"}}
 	r := httptest.NewRequest("POST", "/invite/"+token, strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Origin", a.config.BaseURL)
+	i, _ := a.store.get(token)
+	purpose := "signup-" + i.ID
+	r.AddCookie(&http.Cookie{Name: a.cookieName(purpose), Value: a.signCookie(purpose, signupSession{Key: key, Expires: time.Now().Add(time.Hour).Unix()})})
 	w := httptest.NewRecorder()
 	a.handler().ServeHTTP(w, r)
 	return w
@@ -164,7 +200,7 @@ func TestRetryKnownPartialAccounts(t *testing.T) {
 		t.Fatalf("expected retryable failure, got %d", w.Code)
 	}
 	i, err := a.store.get(token)
-	if err != nil || i.JellyfinID == "" || i.AuthentikID == 0 || i.Creating != "" {
+	if err != nil || len(i.Signups) != 1 || i.Signups[0].JellyfinID == "" || i.Signups[0].AuthentikID == 0 || i.Signups[0].Creating != "" {
 		t.Fatalf("partial state lost: %+v, %v", i, err)
 	}
 	// Also exercise a process restart between attempts.
@@ -193,7 +229,7 @@ func TestAmbiguousCreateRequiresAttention(t *testing.T) {
 		t.Fatal(w.Body.String())
 	}
 	i, err := a.store.get(token)
-	if err != nil || i.Creating != "jellyfin" {
+	if err != nil || len(i.Signups) != 1 || i.Signups[0].Creating != "jellyfin" {
 		t.Fatalf("missing intent: %+v %v", i, err)
 	}
 	if w := signup(a, token); w.Code != 400 {
@@ -229,14 +265,14 @@ func TestStoreExpiryRevocationAndLock(t *testing.T) {
 		second.close()
 		t.Fatal("second process acquired ledger")
 	}
-	_, expired, err := s.create("expired", -time.Second)
+	_, expired, err := s.create("expired", -time.Second, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.get(expired); err == nil {
 		t.Fatal("expired invite accepted")
 	}
-	i, token, err := s.create("revoked", time.Hour)
+	i, token, err := s.create("revoked", time.Hour, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +340,7 @@ func TestPasswordValidation(t *testing.T) {
 
 func TestNonExpiringInvitesPersistAndRemainSingleUse(t *testing.T) {
 	a, _ := testApp(t)
-	i, token, err := a.store.create("No deadline", 0)
+	i, token, err := a.store.create("No deadline", 0, false)
 	if err != nil || i.ExpiresAt != nil || i.expired(time.Now().AddDate(100, 0, 0)) {
 		t.Fatalf("non-expiring invite: %+v, %v", i, err)
 	}
@@ -336,7 +372,7 @@ func TestNonExpiringInvitesPersistAndRemainSingleUse(t *testing.T) {
 		t.Fatal("accepted invitation was revoked")
 	}
 
-	i, token, err = a.store.create("Revoke without a deadline", 0)
+	i, token, err = a.store.create("Revoke without a deadline", 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,11 +1,11 @@
 # ms-invite
 
-A tiny service for inviting people to a media server. Create a single-use link;
+A tiny service for inviting people to a media server. Create a single-use or reusable link;
 the recipient chooses a username, email, and password, and gets an account in
 **Jellyfin and Authentik**.
 
 - Admin login through **Authentik OIDC**, restricted to an admin group.
-- Expiring invitations, labels, status tracking, and revocation.
+- Optional expiry, reusable invitations, per-person signup history, and revocation.
 - Server-rendered pages; no JavaScript or frontend build.
 - One Go binary, embedded assets, and a small persistent JSON ledger.
 - Nix flake, NixOS module, systemd credentials, and optional nginx/ACME TLS.
@@ -182,11 +182,20 @@ curl --fail-with-body https://invite.example.com/api/invites \
 
 Returns HTTP 201 with `{"invite": {...}, "url": "https://.../invite/..."}`.
 Expiry defaults to seven days; accepted values are 1–8760 hours, or `0` for
-**never expires**. Non-expiring invitations return `"expires_at": null`. They
-remain single-use and can be revoked. In the admin page, choose **Never expires**
-when creating a link, or use **Revoke link** in its Actions column to cancel it.
-Accepted invitations cannot be revoked; manage those accounts in Jellyfin and
-Authentik instead.
+**never expires**. Non-expiring invitations return `"expires_at": null`.
+
+Set `"reusable": true` to let multiple people sign up through the same link. In
+the admin page, choose **Usage → Reusable**; combine it with **Never expires**
+for a link that works until revoked. Reusable links have no signup-count limit.
+The default is single-use, and existing links remain single-use after upgrading.
+
+Use **Revoke link** in the Actions column to stop new signups and pending retries.
+Reusable links can be revoked even after successful signups. Revocation does not
+disable accounts already created. Accepted single-use links are already closed.
+
+Invitations contain a `signups` array with each recipient's status, account IDs,
+creation/completion timestamps, and any provisioning error. These fields replace
+the old top-level recipient fields; existing ledger entries migrate automatically.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
@@ -205,15 +214,20 @@ transaction. The service records each step before continuing:
 - Authentik users start inactive. Jellyfin users start with an unknown random
   bootstrap password. Both are configured before signup finishes.
 - If a later operation fails, the recipient can retry the **same invite, username,
-  and email** before expiry. Known account IDs are reused; both passwords are set
-  again. Passwords are never stored by this service.
+  and email in the same browser** before expiry. A signed, HTTP-only cookie binds
+  their recovery state to that browser for up to 30 days; only a hash of the
+  recovery key is persisted. Known account IDs are reused; both passwords are set
+  again. Passwords are never stored by this service. Completed signups cannot be
+  replayed to change their passwords.
 - If an account-creation response is lost, or the process stops during creation,
-  the invite shows **needs attention**. It will not guess ownership of an existing
+  that signup shows **needs review**. Other people can still use a reusable link.
+  It will not guess ownership of an existing
   username or automatically repeat an uncertain create operation.
 - For an invite needing attention, review the recorded IDs and upstream accounts.
-  Authentik users carry an `ms_invite_id` attribute. Remove only confirmed partial
-  accounts, revoke the invite, then issue a replacement. The same cleanup applies
-  to abandoned or expired partial signups.
+  Authentik users carry `ms_invite_id` and `ms_invite_signup_id` attributes. Remove
+  only confirmed partial accounts, then issue a replacement invitation to that
+  recipient. A reusable link may stay open for other people. The same cleanup
+  applies to abandoned or expired partial signups and lost recovery cookies.
 - Revocation prevents further signup; it does not disable or delete provisioned
   accounts. A failure during final activation may leave one account active. Check
   both services when cleaning up a partial signup.
@@ -238,6 +252,6 @@ nix flake check --no-build
 ```
 
 Tests use mock Jellyfin/Authentik HTTP servers and a signed mock OIDC provider.
-They cover single-use/expired/revoked invites, persistent partial-signup recovery,
-ambiguous creates, existing-account protection, admin authorization, CSRF, PKCE,
-OIDC claim/signature checks, and session tampering.
+They cover single-use/reusable/expired/revoked invites, per-browser recovery,
+legacy ledger migration, ambiguous creates, existing-account protection, admin
+authorization, CSRF, PKCE, OIDC claim/signature checks, and session tampering.

@@ -60,7 +60,7 @@ input:hover, select:hover { border-color: #a1a69a; }
 input:focus, select:focus { border-color: #345b45; outline: 2px solid #345b45; outline-offset: 2px; }
 small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .create-section { padding: 28px 32px 24px; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
-.create-form { margin-top: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 180px auto; column-gap: 20px; align-items: start; }
+.create-form { margin-top: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 140px 160px auto; column-gap: 20px; align-items: start; }
 .create-form > button { margin-top: 24px; }
 
 .notice { border: 1px solid var(--border); border-radius: 6px; padding: 20px 24px; }
@@ -104,6 +104,7 @@ small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; l
 .account-details dl { line-height: 1.6; margin: 12px 0 0; }
 .account-details dt { font-weight: 500; }
 .account-details dd { margin: 0 0 6px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.signup-history-entry { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
 .empty-state { padding: 48px 24px; text-align: center; border-block: 1px solid var(--border); }
 .empty-state p { margin-top: 6px; font-size: 13px; }
 .section-footnote { font-size: 12px; margin-top: 18px; }
@@ -130,7 +131,7 @@ small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; l
 @media (max-width: 900px) {
   .header-inner, .shell { width: calc(100% - 48px); }
   .signup-layout { gap: 40px; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); padding-block: 48px; }
-  .create-form { grid-template-columns: minmax(0, 1fr) 160px; row-gap: 20px; }
+  .create-form { grid-template-columns: minmax(0, 1fr) 140px 160px; row-gap: 20px; }
   .create-form > button { grid-column: 1 / -1; justify-self: start; margin-top: 0; }
   .invite-table th:first-child { width: 37%; }
   .invite-table th:nth-child(2) { width: 23%; }

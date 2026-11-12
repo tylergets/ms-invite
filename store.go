@@ -19,10 +19,20 @@ import (
 var errUnavailable = errors.New("invite is expired, revoked, or already used")
 
 type invite struct {
+	ID        string          `json:"id"`
+	Label     string          `json:"label"`
+	CreatedAt time.Time       `json:"created_at"`
+	ExpiresAt *time.Time      `json:"expires_at"`
+	Status    string          `json:"status"`
+	Reusable  bool            `json:"reusable"`
+	Signups   []signupAttempt `json:"signups"`
+}
+
+type signupAttempt struct {
 	ID          string     `json:"id"`
-	Label       string     `json:"label"`
+	SessionHash string     `json:"session_hash,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
-	ExpiresAt   *time.Time `json:"expires_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	Status      string     `json:"status"`
 	Username    string     `json:"username,omitempty"`
 	Email       string     `json:"email,omitempty"`
@@ -30,6 +40,30 @@ type invite struct {
 	JellyfinID  string     `json:"jellyfin_id,omitempty"`
 	Creating    string     `json:"creating,omitempty"`
 	LastError   string     `json:"last_error,omitempty"`
+}
+
+func (i invite) Uses() int {
+	n := 0
+	for _, signup := range i.Signups {
+		if signup.Status == "used" {
+			n++
+		}
+	}
+	return n
+}
+
+func (i invite) NeedsAttention() bool {
+	for _, signup := range i.Signups {
+		if signup.Creating != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (i invite) clone() invite {
+	i.Signups = append([]signupAttempt{}, i.Signups...)
+	return i
 }
 
 // The small invite ledger is replaced atomically and fsynced on every transition.
@@ -65,6 +99,23 @@ func openStore(dir string) (*store, error) {
 		if s.rows == nil && err == nil {
 			err = errors.New("invalid invite ledger")
 		}
+		if err == nil {
+			// Older ledgers stored a single signup directly on the invitation.
+			// Preserve those links as single-use, including incomplete signups.
+			var legacy map[string]signupAttempt
+			if err = json.Unmarshal(data, &legacy); err == nil {
+				for key, old := range legacy {
+					i := s.rows[key]
+					if len(i.Signups) == 0 && old.Username != "" {
+						if old.Status != "used" {
+							old.Status = "pending"
+						}
+						i.Signups = []signupAttempt{old}
+						s.rows[key] = i
+					}
+				}
+			}
+		}
 	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		s.close()
@@ -96,7 +147,7 @@ func (s *store) commit(change func(map[string]invite) error) error {
 	}
 	rows := make(map[string]invite, len(s.rows))
 	for key, row := range s.rows {
-		rows[key] = row
+		rows[key] = row.clone()
 	}
 	if err := change(rows); err != nil {
 		return err
@@ -140,7 +191,7 @@ func atomicWrite(dir string, data []byte) error {
 	return d.Sync()
 }
 
-func (s *store) create(label string, ttl time.Duration) (invite, string, error) {
+func (s *store) create(label string, ttl time.Duration, reusable bool) (invite, string, error) {
 	token, err := randomToken(32)
 	if err != nil {
 		return invite{}, "", err
@@ -150,7 +201,7 @@ func (s *store) create(label string, ttl time.Duration) (invite, string, error) 
 		return invite{}, "", err
 	}
 	now := time.Now().UTC()
-	i := invite{ID: id, Label: label, CreatedAt: now, Status: "open"}
+	i := invite{ID: id, Label: label, CreatedAt: now, Status: "open", Reusable: reusable, Signups: []signupAttempt{}}
 	if ttl != 0 {
 		expires := now.Add(ttl)
 		i.ExpiresAt = &expires
@@ -169,11 +220,11 @@ func (s *store) get(token string) (invite, error) {
 	if !ok || (i.Status != "open" && i.Status != "pending") || i.expired(time.Now()) {
 		return invite{}, errUnavailable
 	}
-	return i, nil
+	return i.clone(), nil
 }
 
 func (s *store) put(token string, i invite) error {
-	return s.commit(func(rows map[string]invite) error { rows[digest(token)] = i; return nil })
+	return s.commit(func(rows map[string]invite) error { rows[digest(token)] = i.clone(); return nil })
 }
 
 func (s *store) list() []invite {
@@ -181,12 +232,10 @@ func (s *store) list() []invite {
 	defer s.mu.Unlock()
 	rows := make([]invite, 0, len(s.rows))
 	for _, i := range s.rows {
-		if i.Creating != "" && i.Status == "pending" {
-			i.Status = "needs attention"
-		} else if (i.Status == "open" || i.Status == "pending") && i.expired(time.Now()) {
+		if (i.Status == "open" || i.Status == "pending") && i.expired(time.Now()) {
 			i.Status = "expired"
 		}
-		rows = append(rows, i)
+		rows = append(rows, i.clone())
 	}
 	sort.Slice(rows, func(a, b int) bool { return rows[a].CreatedAt.After(rows[b].CreatedAt) })
 	return rows

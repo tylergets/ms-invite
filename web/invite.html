@@ -18,12 +18,12 @@
     <form method="post" class="signup-form">
       <div class="field">
         <label for="username">Username</label>
-        <input id="username" name="username" value="{{.Invite.Username}}" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9_.\-]{2,31}" minlength="3" maxlength="32" aria-describedby="username-hint" required>
+        <input id="username" name="username" value="{{.Signup.Username}}" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9_.\-]{2,31}" minlength="3" maxlength="32" aria-describedby="username-hint" required>
         <small id="username-hint">3–32 lowercase letters, numbers, dots, underscores, or hyphens.</small>
       </div>
       <div class="field">
         <label for="email">Email address</label>
-        <input id="email" name="email" type="email" value="{{.Invite.Email}}" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
+        <input id="email" name="email" type="email" value="{{.Signup.Email}}" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
       </div>
       <div class="field">
         <label for="password">Password</label>
@@ -36,7 +36,7 @@
       </div>
       <button type="submit">Create account <span aria-hidden="true">→</span></button>
     </form>
-    <p class="form-footnote">This link can be used once. Setup may take a moment.</p>
+    <p class="form-footnote">{{if .Invite.Reusable}}This is a reusable invitation.{{else}}This link can be used once.{{end}} Setup may take a moment. If you need to retry, use this browser.</p>
   </section>
 </main>
 {{template "foot" .}}

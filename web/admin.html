@@ -11,7 +11,7 @@
   {{if .Link}}
   <section class="notice notice-success" aria-labelledby="link-heading" role="status">
     <h2 id="link-heading">Invitation created</h2>
-    <p>Copy the link below and send it to your guest. It won’t be shown again.</p>
+    <p>Copy the link below to share it. It won’t be shown again.</p>
     <label class="sr-only" for="invite-link">Invitation link</label>
     <input id="invite-link" class="invite-link" readonly value="{{.Link}}" spellcheck="false">
   </section>
@@ -20,13 +20,17 @@
   <section class="create-section" aria-labelledby="create-heading">
     <div class="section-heading">
       <h2 id="create-heading">New invitation</h2>
-      <p>A single-use link for one person.</p>
+      <p>Invite one person or share a reusable link.</p>
     </div>
     <form method="post" action="/admin/invites" class="create-form">
       <div class="field">
         <label for="label">Label <span class="optional">Optional</span></label>
         <input id="label" name="label" placeholder="e.g. Alex" maxlength="120" aria-describedby="label-hint">
         <small id="label-hint">A name or note, visible only to you.</small>
+      </div>
+      <div class="field">
+        <label for="usage">Usage</label>
+        <select id="usage" name="reusable"><option value="false">Single use</option><option value="true">Reusable</option></select>
       </div>
       <div class="field">
         <label for="expiry">Link expires after</label>
@@ -49,14 +53,18 @@
         <tr>
           <td class="invitation-name">
             <strong>{{if .Label}}{{.Label}}{{else}}Untitled invitation{{end}}</strong>
-            {{if .Username}}<span class="guest-name">{{.Username}}</span>{{end}}
-            {{if .LastError}}<p class="row-error">{{.LastError}}</p>{{end}}
-            {{if .Creating}}<p class="row-error">Review the {{.Creating}} account before creating another invitation.</p>{{end}}
-            {{if .AuthentikID}}<details class="account-details"><summary>Account details</summary><dl><dt>Authentik ID</dt><dd>{{.AuthentikID}}</dd>{{if .JellyfinID}}<dt>Jellyfin ID</dt><dd>{{.JellyfinID}}</dd>{{end}}</dl></details>{{end}}
+            <span class="guest-name">{{if .Reusable}}Reusable{{else}}Single use{{end}} · {{.Uses}} signup{{if ne .Uses 1}}s{{end}}</span>
+            {{if .NeedsAttention}}<p class="row-error">A signup needs review.{{if .Reusable}} Other people can still use this link.{{end}}</p>{{end}}
+            {{if .Signups}}<details class="account-details"><summary>Signup history ({{len .Signups}})</summary>
+              {{range .Signups}}<div class="signup-history-entry"><strong>{{.Username}}</strong> · {{if eq .Status "used"}}Completed{{else if .Creating}}Needs review{{else}}In progress{{end}}
+                {{if .LastError}}<p class="row-error">{{.LastError}}</p>{{end}}
+                <dl><dt>Email</dt><dd>{{.Email}}</dd>{{if .AuthentikID}}<dt>Authentik ID</dt><dd>{{.AuthentikID}}</dd>{{end}}{{if .JellyfinID}}<dt>Jellyfin ID</dt><dd>{{.JellyfinID}}</dd>{{end}}</dl>
+              </div>{{end}}
+            </details>{{end}}
           </td>
           <td data-label="Status">
-            <span class="status status-{{.Status}}{{if .Creating}} status-attention{{end}}">
-              {{if .Creating}}Needs review{{else if eq .Status "open"}}Ready to use{{else if eq .Status "used"}}Accepted{{else if eq .Status "revoked"}}Revoked{{else if eq .Status "expired"}}Expired{{else if eq .Status "pending"}}In progress{{else}}{{.Status}}{{end}}
+            <span class="status status-{{.Status}}">
+              {{if eq .Status "open"}}Ready to use{{else if eq .Status "used"}}Accepted{{else if eq .Status "revoked"}}Revoked{{else if eq .Status "expired"}}Expired{{else if eq .Status "pending"}}In progress{{else}}{{.Status}}{{end}}
             </span>
           </td>
           <td class="expiry" data-label="Expires (UTC)">{{if .ExpiresAt}}<time datetime="{{.ExpiresAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.ExpiresAt.Format "Jan 2, 2006"}}<span>{{.ExpiresAt.Format "15:04"}}</span></time>{{else}}Never{{end}}</td>

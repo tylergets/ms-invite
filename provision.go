@@ -36,49 +36,72 @@ func validateSignup(username, email, password string) error {
 // Call while holding app.provisionMu. Each non-idempotent create is preceded by
 // a durable intent marker. An interrupted/ambiguous create is never retried or
 // reconciled by username: that could take over an unrelated existing account.
-func (a *app) provision(token, username, email, password string) error {
-	i, err := a.store.get(token)
+func (a *app) provision(token, sessionKey, username, email, password string) error {
+	link, err := a.store.get(token)
 	if err != nil {
 		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	index := -1
+	for n, signup := range link.Signups {
+		if signup.SessionHash == digest(sessionKey) || (!link.Reusable && signup.SessionHash == "") {
+			index = n
+			break
+		}
+	}
+	if index < 0 {
+		if !link.Reusable && len(link.Signups) > 0 {
+			return errors.New("signup has already started; continue in the original browser")
+		}
+		if err := a.upstream.available(ctx, username); err != nil {
+			return err
+		}
+		id, err := randomToken(12)
+		if err != nil {
+			return err
+		}
+		link.Signups = append(link.Signups, signupAttempt{
+			ID: id, SessionHash: digest(sessionKey), CreatedAt: time.Now().UTC(),
+			Status: "pending", Username: username, Email: email,
+		})
+		index = len(link.Signups) - 1
+	}
+	i := &link.Signups[index]
+	if i.Status == "used" {
+		return errors.New("this signup is already complete; open the invitation again to create another account")
 	}
 	if i.Creating != "" {
 		return errAttention
 	}
-	if i.Username != "" && (i.Username != username || i.Email != email) {
-		return errors.New("this invite has already started signup; use the original username and email")
+	if i.Username != username || i.Email != email {
+		return errors.New("this browser has already started signup; use the original username and email")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	save := func() error { return a.store.put(token, i) }
+	i.SessionHash = digest(sessionKey)
+	if !link.Reusable {
+		link.Status = "pending"
+	}
+	save := func() error { return a.store.put(token, link) }
+	if err := save(); err != nil {
+		return err
+	}
 	fail := func(err error) error {
 		i.LastError = err.Error()
 		if saveErr := save(); saveErr != nil {
-			slog.Error("could not save signup failure", "invite_id", i.ID, "error", saveErr)
+			slog.Error("could not save signup failure", "invite_id", link.ID, "signup_id", i.ID, "error", saveErr)
 		}
-		slog.Error("signup failed", "invite_id", i.ID, "error", err)
+		slog.Error("signup failed", "invite_id", link.ID, "signup_id", i.ID, "error", err)
 		if i.Creating != "" {
 			return errAttention
 		}
 		return errors.New("signup could not finish; please try again with the same username and email, or contact your administrator")
-	}
-	if i.Status == "open" {
-		if err := a.upstream.available(ctx, username); err != nil {
-			if errors.Is(err, errUsernameTaken) {
-				return err
-			}
-			return fail(err)
-		}
-		i.Username, i.Email, i.Status = username, email, "pending"
-		if err := save(); err != nil {
-			return fail(err)
-		}
 	}
 	if i.AuthentikID == 0 {
 		i.Creating = "authentik"
 		if err := save(); err != nil {
 			return fail(err)
 		}
-		id, err := a.upstream.createAuthentik(ctx, i)
+		id, err := a.upstream.createAuthentik(ctx, link.ID, *i)
 		if err != nil {
 			return fail(err)
 		}
@@ -100,7 +123,7 @@ func (a *app) provision(token, username, email, password string) error {
 		if err := save(); err != nil {
 			return fail(err)
 		}
-		id, err := a.upstream.createJellyfin(ctx, i)
+		id, err := a.upstream.createJellyfin(ctx, *i)
 		if err != nil {
 			return fail(err)
 		}
@@ -122,9 +145,14 @@ func (a *app) provision(token, username, email, password string) error {
 		return fail(err)
 	}
 	i.Status, i.LastError = "used", ""
+	now := time.Now().UTC()
+	i.CompletedAt = &now
+	if !link.Reusable {
+		link.Status = "used"
+	}
 	if err := save(); err != nil {
 		return fail(err)
 	}
-	slog.Info("signup completed", "invite_id", i.ID)
+	slog.Info("signup completed", "invite_id", link.ID, "signup_id", i.ID)
 	return nil
 }

@@ -45,7 +45,7 @@
               "-w"
             ];
             meta = {
-              description = "Single-use invitations for Jellyfin and Authentik";
+              description = "Single-use and reusable invitations for Jellyfin and Authentik";
               mainProgram = "ms-invite";
               platforms = systems;
             };

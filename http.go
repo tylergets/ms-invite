@@ -74,6 +74,7 @@ func (a *app) handler() http.Handler {
 type pageData struct {
 	Title, Message, Error, Link string
 	Invite                      invite
+	Signup                      signupAttempt
 	Invites                     []invite
 }
 
@@ -132,13 +133,14 @@ func (a *app) createInvite(w http.ResponseWriter, r *http.Request) {
 	input := struct {
 		Label          string `json:"label"`
 		ExpiresInHours int    `json:"expires_in_hours"`
+		Reusable       bool   `json:"reusable"`
 	}{ExpiresInHours: 168}
 	api := strings.HasPrefix(r.URL.Path, "/api/")
 	if api {
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&input); err != nil {
-			http.Error(w, "expected JSON with label and expires_in_hours", http.StatusBadRequest)
+			http.Error(w, "expected JSON with label, expires_in_hours and optional reusable", http.StatusBadRequest)
 			return
 		}
 		if err := dec.Decode(new(any)); err != io.EOF {
@@ -157,13 +159,21 @@ func (a *app) createInvite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		input.ExpiresInHours = hours
+		switch r.PostForm.Get("reusable") {
+		case "", "false":
+		case "true":
+			input.Reusable = true
+		default:
+			http.Error(w, "choose single-use or reusable", http.StatusBadRequest)
+			return
+		}
 	}
 	input.Label = strings.TrimSpace(input.Label)
 	if len(input.Label) > 120 || input.ExpiresInHours < 0 || input.ExpiresInHours > 8760 {
 		http.Error(w, "label must be at most 120 bytes; expiry must be 0 (never) or 1–8760 hours", http.StatusBadRequest)
 		return
 	}
-	i, token, err := a.store.create(input.Label, time.Duration(input.ExpiresInHours)*time.Hour)
+	i, token, err := a.store.create(input.Label, time.Duration(input.ExpiresInHours)*time.Hour, input.Reusable)
 	if err != nil {
 		slog.Error("create invite failed", "error", err)
 		http.Error(w, "could not save invite", http.StatusInternalServerError)
@@ -203,11 +213,25 @@ func (a *app) invitePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invite unavailable", http.StatusGone)
 		return
 	}
-	if i.Creating != "" {
+	key := a.signupKey(r, i)
+	var current signupAttempt
+	for _, signup := range i.Signups {
+		if key != "" && signup.SessionHash == digest(key) {
+			current = signup
+		}
+	}
+	if key == "" || current.Status == "used" {
+		if _, err := a.newSignupSession(w, i); err != nil {
+			http.Error(w, "could not start signup", http.StatusInternalServerError)
+			return
+		}
+		current = signupAttempt{}
+	}
+	if current.Creating != "" {
 		render(w, "message.html", pageData{Title: "Signup needs a review", Message: errAttention.Error()})
 		return
 	}
-	render(w, "invite.html", pageData{Title: "Create your account", Invite: i})
+	render(w, "invite.html", pageData{Title: "Create your account", Invite: i, Signup: current})
 }
 
 func (a *app) accept(w http.ResponseWriter, r *http.Request) {
@@ -232,6 +256,11 @@ func (a *app) accept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username := strings.TrimSpace(r.PostForm.Get("username"))
+	key := a.signupKey(r, i)
+	if key == "" {
+		http.Error(w, "open the invitation link again to start signup; cookies are required", http.StatusBadRequest)
+		return
+	}
 	email := strings.TrimSpace(r.PostForm.Get("email"))
 	password := r.PostForm.Get("password")
 	err = validateSignup(username, email, password)
@@ -239,15 +268,15 @@ func (a *app) accept(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("passwords do not match")
 	}
 	if err == nil {
-		err = a.provision(token, username, email, password)
+		err = a.provision(token, key, username, email, password)
 	}
 	if err != nil {
-		i.Username, i.Email = username, email
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusBadRequest)
-		render(w, "invite.html", pageData{Title: "Check your details", Error: err.Error(), Invite: i})
+		render(w, "invite.html", pageData{Title: "Check your details", Error: err.Error(), Invite: i, Signup: signupAttempt{Username: username, Email: email}})
 		return
 	}
-	// A refresh cannot resubmit credentials or reuse the capability.
+	// The completed attempt remains immutable; another recipient starts fresh.
+	a.setCookie(w, "signup-"+i.ID, "", -1)
 	render(w, "message.html", pageData{Title: "Your account is ready.", Message: "Your Jellyfin and Authentik accounts are ready. Sign in with the username and password you just chose."})
 }

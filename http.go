@@ -41,7 +41,7 @@ func newApp(c config, s *store) *app {
 func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		render(w, "message.html", pageData{Title: "No invite found"})
+		a.render(w, "message.html", pageData{Title: "No invite found"})
 	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /style.css", func(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +75,7 @@ func (a *app) handler() http.Handler {
 }
 
 type pageData struct {
+	SiteName                    string
 	Title, Message, Error, Link string
 	Admin                       bool
 	Invite                      invite
@@ -82,7 +83,8 @@ type pageData struct {
 	Invites                     []invite
 }
 
-func render(w http.ResponseWriter, name string, data pageData) {
+func (a *app) render(w http.ResponseWriter, name string, data pageData) {
+	data.SiteName = a.config.SiteName
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := pages.ExecuteTemplate(w, name, data); err != nil {
 		slog.Error("render failed", "error", err)
@@ -120,7 +122,7 @@ func (a *app) admin(api bool, next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (a *app) adminPage(w http.ResponseWriter, r *http.Request) {
-	render(w, "admin.html", pageData{Title: "Invitations", Admin: true, Invites: a.adminInvites()})
+	a.render(w, "admin.html", pageData{Title: "Invitations", Admin: true, Invites: a.adminInvites()})
 }
 
 func (a *app) adminInvites() []invite {
@@ -195,7 +197,7 @@ func (a *app) createInvite(w http.ResponseWriter, r *http.Request) {
 		}{i, link})
 		return
 	}
-	render(w, "admin.html", pageData{Title: "Invitation created", Admin: true, Link: link, Invites: a.adminInvites()})
+	a.render(w, "admin.html", pageData{Title: "Invitation created", Admin: true, Link: link, Invites: a.adminInvites()})
 }
 
 func (a *app) revokeInvite(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +222,7 @@ func (a *app) invitePage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusGone)
-		render(w, "message.html", pageData{Title: "No invite found"})
+		a.render(w, "message.html", pageData{Title: "No invite found"})
 		return
 	}
 	key := a.signupKey(r, i)
@@ -238,10 +240,10 @@ func (a *app) invitePage(w http.ResponseWriter, r *http.Request) {
 		current = signupAttempt{}
 	}
 	if current.Creating != "" {
-		render(w, "message.html", pageData{Title: "Signup needs a review", Message: errAttention.Error()})
+		a.render(w, "message.html", pageData{Title: "Signup needs a review", Message: errAttention.Error()})
 		return
 	}
-	render(w, "invite.html", pageData{Title: "Create your account", Invite: i, Signup: current})
+	a.render(w, "invite.html", pageData{Title: "Create your account", Invite: i, Signup: current})
 }
 
 func (a *app) accept(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +266,7 @@ func (a *app) accept(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusGone)
-		render(w, "message.html", pageData{Title: "No invite found"})
+		a.render(w, "message.html", pageData{Title: "No invite found"})
 		return
 	}
 	username := strings.TrimSpace(r.PostForm.Get("username"))
@@ -285,10 +287,10 @@ func (a *app) accept(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusBadRequest)
-		render(w, "invite.html", pageData{Title: "Check your details", Error: err.Error(), Invite: i, Signup: signupAttempt{Username: username, Email: email}})
+		a.render(w, "invite.html", pageData{Title: "Check your details", Error: err.Error(), Invite: i, Signup: signupAttempt{Username: username, Email: email}})
 		return
 	}
 	// The completed attempt remains immutable; another recipient starts fresh.
 	a.setCookie(w, "signup-"+i.ID, "", -1)
-	render(w, "message.html", pageData{Title: "Your account is ready.", Message: "Your Jellyfin and Authentik accounts are ready. Sign in with the username and password you just chose."})
+	a.render(w, "message.html", pageData{Title: "Your account is ready.", Message: "Your Jellyfin and Authentik accounts are ready. Sign in with the username and password you just chose."})
 }

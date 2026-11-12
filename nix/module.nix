@@ -17,6 +17,13 @@ in
   options.services.ms-invite = {
     enable = mkEnableOption "the Jellyfin and Authentik invite service";
 
+    siteName = mkOption {
+      type = types.str;
+      default = "Media library";
+      example = "Ragtag Club";
+      description = "Site name displayed in the admin header and page titles.";
+    };
+
     package = mkOption {
       type = types.package;
       description = "The ms-invite package. Set automatically by the flake module.";
@@ -144,6 +151,7 @@ in
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       environment = {
+        SITE_NAME = cfg.siteName;
         LISTEN_ADDR = "${cfg.listenAddress}:${toString cfg.port}";
         BASE_URL = cfg.publicUrl;
         DATA_DIR = "/var/lib/ms-invite";

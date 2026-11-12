@@ -79,6 +79,7 @@ Import `ms-invite.nixosModules.default` into your host's modules and configure:
 ```nix
 services.ms-invite = {
   enable = true;
+  siteName = "Ragtag Club";
   publicUrl = "https://invite.example.com";
   adminTokenFile = "/run/secrets/ms-invite-admin-token";
 
@@ -116,6 +117,9 @@ at the host; the nginx option opens ports 80/443 and obtains a certificate.
 The application listens on `127.0.0.1:8080` by default. With your own proxy, leave
 `nginx.enable` disabled, forward the original host, and allow a 120-second upstream
 timeout. `publicUrl` must exactly match the browser origin and have no path.
+
+`siteName` sets the admin header and browser page titles (`SITE_NAME` outside
+NixOS). Public pages have no header, and no pages include a footer.
 
 Provision the four secret files with your preferred secret manager, or place
 root-readable files at persistent runtime paths such as `/var/lib/secrets/`:

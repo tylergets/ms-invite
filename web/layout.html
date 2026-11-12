@@ -2,22 +2,18 @@
 <html lang="en"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="only light">
-  <title>{{.Title}} · Media library</title>
+  <title>{{.Title}} · {{.SiteName}}</title>
   <link rel="stylesheet" href="/style.css">
 </head><body>
   <a class="skip-link" href="#main">Skip to content</a>
   {{if .Admin}}
   <header class="site-header">
     <div class="header-inner">
-      <a class="wordmark" href="/" aria-label="Media library home">Media<span>library</span></a>
-      <span class="header-section">Invitations</span>
+      <a class="wordmark" href="/admin">{{.SiteName}}</a>
     </div>
   </header>
   {{end}}
   <div class="shell{{if not .Admin}} public-shell{{end}}">{{end}}
 {{define "foot"}}
-    {{if .Admin}}
-    <footer class="site-footer"><span>Media library</span><span>Powered by Jellyfin &amp; Authentik</span></footer>
-    {{end}}
   </div>
 </body></html>{{end}}

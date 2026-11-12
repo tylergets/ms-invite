@@ -136,7 +136,7 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 		}
 	}))
 	t.Cleanup(f.server.Close)
-	c := config{BaseURL: "https://invite.example.com", AdminToken: strings.Repeat("a", 32),
+	c := config{SiteName: "Ragtag Club", BaseURL: "https://invite.example.com", AdminToken: strings.Repeat("a", 32),
 		JellyfinURL: f.server.URL + "/jellyfin", JellyfinKey: "jf-key", AuthentikURL: f.server.URL + "/auth", AuthentikToken: "ak-key",
 		AuthentikPath: "users/media", OIDCAdminGroup: "media-admins"}
 	return newApp(c, testStore(t)), f
@@ -473,6 +473,9 @@ func TestAdminHidesRevokedInvitations(t *testing.T) {
 		a.handler().ServeHTTP(w, r)
 		if w.Code != 200 || strings.Contains(w.Body.String(), revoked.Label) || !strings.Contains(w.Body.String(), "Visible invitation") {
 			t.Fatalf("incorrect admin list at %s: %s", path, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), ">Ragtag Club</a>") || strings.Contains(w.Body.String(), "<footer") {
+			t.Fatal("admin branding is missing or a footer was rendered")
 		}
 	}
 	r := httptest.NewRequest("GET", "/api/invites", nil)

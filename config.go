@@ -9,6 +9,7 @@ import (
 )
 
 type config struct {
+	SiteName                                                   string
 	Listen, BaseURL, DataDir                                   string
 	AdminToken, JellyfinURL, JellyfinKey                       string
 	AuthentikURL, AuthentikToken, AuthentikPath                string
@@ -36,6 +37,7 @@ func secret(key string) (string, error) {
 
 func loadConfig() (config, error) {
 	c := config{
+		SiteName:       env("SITE_NAME", "Media library"),
 		Listen:         env("LISTEN_ADDR", "127.0.0.1:8080"),
 		BaseURL:        strings.TrimRight(os.Getenv("BASE_URL"), "/"),
 		DataDir:        env("DATA_DIR", "./data"),

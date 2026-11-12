@@ -24,7 +24,7 @@ func TestProvisioningServiceSelection(t *testing.T) {
 			token := reusableInvite(t, a)
 			page := httptest.NewRecorder()
 			a.handler().ServeHTTP(page, httptest.NewRequest("GET", "/invite/"+token, nil))
-			if strings.Contains(page.Body.String(), "<dt>Jellyfin</dt>") != tc.jellyfin || strings.Contains(page.Body.String(), "<dt>Authentik</dt>") != tc.authentik {
+			if strings.Contains(page.Body.String(), "Jellyfin") != tc.jellyfin || strings.Contains(page.Body.String(), "Authentik") != tc.authentik {
 				t.Fatal("signup page does not match enabled services")
 			}
 			w := signup(a, token)

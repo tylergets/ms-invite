@@ -373,8 +373,11 @@ func TestNonExpiringInvitesPersistAndRemainSingleUse(t *testing.T) {
 	if w := signup(a, token); w.Code != 410 {
 		t.Fatalf("non-expiring invitation reused: %d", w.Code)
 	}
-	if err := a.store.revoke(i.ID); err == nil {
-		t.Fatal("accepted invitation was revoked")
+	if err := a.store.revoke(i.ID); err != nil {
+		t.Fatalf("could not hide accepted invitation: %v", err)
+	}
+	if rows := a.store.list(); rows[0].Status != "revoked" || rows[0].Uses() != 1 {
+		t.Fatal("hiding accepted invitation lost signup history")
 	}
 
 	i, token, err = a.store.create("Revoke without a deadline", 0, false)
@@ -512,5 +515,42 @@ func TestPublicPagesHaveNoAdminChrome(t *testing.T) {
 		if strings.Contains(body, "<header") || strings.Contains(body, "<footer") {
 			t.Fatalf("public page includes admin chrome: %s", tc.path)
 		}
+	}
+}
+
+func TestHideAcceptedInvitationLeavesAccountAlone(t *testing.T) {
+	a, f := testApp(t)
+	token := newInvite(t, a)
+	if w := signup(a, token); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	i := a.store.list()[0]
+	cookie := &http.Cookie{Name: a.cookieName("session"), Value: a.signCookie("session", adminSession{Subject: "admin", Group: a.config.OIDCAdminGroup, Expires: time.Now().Add(time.Hour).Unix()})}
+	r := httptest.NewRequest("GET", "/admin", nil)
+	r.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	a.handler().ServeHTTP(w, r)
+	if !strings.Contains(w.Body.String(), "Hide accepted invitation") {
+		t.Fatal("accepted invitation has no Hide action")
+	}
+	f.mu.Lock()
+	calls := len(f.calls)
+	f.mu.Unlock()
+	r = httptest.NewRequest("POST", "/admin/invites/"+i.ID+"/revoke", nil)
+	r.Header.Set("Origin", a.config.BaseURL)
+	r.AddCookie(cookie)
+	w = httptest.NewRecorder()
+	a.handler().ServeHTTP(w, r)
+	if w.Code != http.StatusSeeOther || len(a.adminInvites()) != 0 {
+		t.Fatal("accepted invitation was not hidden")
+	}
+	stored := a.store.list()[0]
+	if stored.Uses() != 1 || stored.Signups[0].AuthentikID != i.Signups[0].AuthentikID || stored.Signups[0].JellyfinID != i.Signups[0].JellyfinID {
+		t.Fatal("hiding invitation changed account history")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.calls) != calls || !f.akActive || f.jfDisabled {
+		t.Fatal("hiding invitation modified upstream accounts")
 	}
 }

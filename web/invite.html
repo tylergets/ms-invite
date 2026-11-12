@@ -1,20 +1,12 @@
 {{template "head" .}}
 <main id="main" class="signup-layout">
-  <div class="signup-intro">
-    <div class="ticket-mark" aria-hidden="true"></div>
-    <p class="section-label">Your invitation</p>
-    <h1>Create your account.</h1>
-    <p class="intro-copy">{{if and .JellyfinEnabled .AuthentikEnabled}}A single signup for your media library and club services.{{else if .JellyfinEnabled}}Your own account for the media library.{{else}}Your account for club services.{{end}}</p>
-    <dl class="service-list">
-      {{if .JellyfinEnabled}}<div><dt>Jellyfin</dt><dd>Your movies, shows, and more.</dd></div>{{end}}
-      {{if .AuthentikEnabled}}<div><dt>Authentik</dt><dd>Your sign-in for club services.</dd></div>{{end}}
-    </dl>
-    <p class="invitation-expiry">{{if .Invite.ExpiresAt}}Accept by <time datetime="{{.Invite.ExpiresAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.Invite.ExpiresAt.Format "January 2, 2006 at 15:04"}} UTC</time>.{{else}}This invitation does not expire.{{end}}</p>
+  <div class="signup-heading">
+    {{template "invite-mark"}}
+    <h1 id="signup-title">Create your account</h1>
+    <p class="intro-copy">{{if and .JellyfinEnabled .AuthentikEnabled}}Your invitation to Jellyfin and Authentik.{{else if .JellyfinEnabled}}Your invitation to Jellyfin.{{else}}Your invitation to Authentik.{{end}}</p>
   </div>
 
-  <section class="signup-form-section" aria-labelledby="account-heading">
-    <h2 id="account-heading">Account details</h2>
-    {{if and .JellyfinEnabled .AuthentikEnabled}}<p class="form-intro">Use the same username and password for both services.</p>{{end}}
+  <section class="signup-form-section" aria-labelledby="signup-title">
     {{if .Error}}<div class="notice notice-error" role="alert"><h3>Check your details</h3><p>{{.Error}}</p></div>{{end}}
     <form method="post" class="signup-form">
       <div class="field">
@@ -26,18 +18,21 @@
         <label for="email">Email address</label>
         <input id="email" name="email" type="email" value="{{.Signup.Email}}" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
       </div>
-      <div class="field">
+      <div class="field password-field">
         <label for="password">Password</label>
         <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="password-hint" required>
         <small id="password-hint">At least 12 characters.</small>
       </div>
-      <div class="field">
+      <div class="field password-field">
         <label for="password_confirm">Confirm password</label>
         <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
       </div>
       <button type="submit">Create account <span aria-hidden="true">→</span></button>
     </form>
-    <p class="form-footnote">{{if .Invite.Reusable}}This is a reusable invitation.{{else}}This link can be used once.{{end}} Setup may take a moment. If you need to retry, use this browser.</p>
+    <div class="invite-details">
+      <span>{{if .Invite.Reusable}}Reusable invitation{{else}}Single-use invitation{{end}}</span>
+      <span>{{if .Invite.ExpiresAt}}Expires <time datetime="{{.Invite.ExpiresAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.Invite.ExpiresAt.Format "Jan 2, 2006"}}</time>{{else}}This invitation does not expire.{{end}}</span>
+    </div>
   </section>
 </main>
 {{template "foot" .}}

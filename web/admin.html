@@ -69,11 +69,11 @@
           </td>
           <td class="expiry" data-label="Expires (UTC)">{{if .ExpiresAt}}<time datetime="{{.ExpiresAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.ExpiresAt.Format "Jan 2, 2006"}}<span>{{.ExpiresAt.Format "15:04"}}</span></time>{{else}}Never{{end}}</td>
           <td class="row-action">
-            {{if and (ne .Status "used") (ne .Status "revoked")}}
-            <form method="post" action="/admin/invites/{{.ID}}/revoke"><button class="button-revoke" type="submit" aria-label="Revoke link for {{if .Label}}{{.Label}}{{else}}untitled invitation{{end}}">Revoke link</button></form>
+            {{if ne .Status "revoked"}}
+            <form method="post" action="/admin/invites/{{.ID}}/revoke"><button class="button-revoke" type="submit" aria-label="{{if eq .Status "used"}}Hide accepted invitation{{else}}Revoke link{{end}} for {{if .Label}}{{.Label}}{{else}}untitled invitation{{end}}">{{if eq .Status "used"}}Hide{{else}}Revoke link{{end}}</button></form>
             {{else}}
             <button class="button-revoke" type="button" disabled>Revoke link</button>
-            <span class="action-note">{{if eq .Status "used"}}Already accepted{{else}}Already revoked{{end}}</span>
+            <span class="action-note">Already revoked</span>
             {{end}}
           </td>
         </tr>

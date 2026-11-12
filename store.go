@@ -251,9 +251,6 @@ func (s *store) revoke(id string) error {
 	return s.commit(func(rows map[string]invite) error {
 		for key, i := range rows {
 			if i.ID == id {
-				if i.Status == "used" {
-					return errors.New("a completed invite cannot be revoked")
-				}
 				i.Status = "revoked"
 				rows[key] = i
 				return nil

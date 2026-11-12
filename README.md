@@ -214,7 +214,9 @@ The default is single-use, and existing links remain single-use after upgrading.
 
 Use **Revoke link** in the Actions column to stop new signups and pending retries.
 Reusable links can be revoked even after successful signups. Revocation does not
-disable accounts already created. Accepted single-use links are already closed.
+disable accounts already created. Accepted single-use links are already closed;
+their **Hide** action removes them from the admin list while keeping signup
+history and leaving the accounts active.
 
 Invitations contain a `signups` array with each recipient's status, account IDs,
 creation/completion timestamps, and any provisioning error. These fields replace

@@ -1,11 +1,11 @@
 {{define "head"}}<!doctype html>
 <html lang="en"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="only light">
+  <meta name="color-scheme" content="only dark">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <title>{{.Title}} · {{.SiteName}}</title>
   <link rel="stylesheet" href="/style.css">
-</head><body>
+</head><body class="{{if .Admin}}admin-page{{else}}public-page{{end}}">
   <a class="skip-link" href="#main">Skip to content</a>
   {{if .Admin}}
   <header class="site-header">
@@ -18,3 +18,4 @@
 {{define "foot"}}
   </div>
 </body></html>{{end}}
+{{define "invite-mark"}}<div class="invite-mark" aria-hidden="true"><svg viewBox="0 0 32 32" width="32" height="32" fill="none"><path d="M5 9a2 2 0 0 1 2-2h18a2 2 0 0 1 2 2v4a3 3 0 0 0 0 6v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4a3 3 0 0 0 0-6V9Z" stroke="currentColor" stroke-width="1.8"/><path d="M12 10v2m0 3v2m0 3v2m5-9h5m-5 5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>{{end}}

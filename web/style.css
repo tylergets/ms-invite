@@ -108,7 +108,6 @@ small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; l
 .signup-history-entry { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
 .empty-state { padding: 48px 24px; text-align: center; border-block: 1px solid var(--border); }
 .empty-state p { margin-top: 6px; font-size: 13px; }
-.section-footnote { font-size: 12px; margin-top: 18px; }
 
 .signup-layout { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); gap: 96px; align-items: start; padding-block: 72px; }
 .signup-intro { padding-top: 28px; }

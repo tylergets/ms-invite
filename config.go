@@ -1,14 +1,19 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
 type config struct {
+	JellyfinEnabled, AuthentikEnabled                          bool
+	JellyfinLibraryIDs                                         []string
+	JellyfinLiveTV                                             bool
 	SiteName                                                   string
 	Listen, BaseURL, DataDir                                   string
 	AdminToken, JellyfinURL, JellyfinKey                       string
@@ -48,10 +53,43 @@ func loadConfig() (config, error) {
 		OIDCClientID:   os.Getenv("AUTHENTIK_OIDC_CLIENT_ID"),
 		OIDCAdminGroup: env("AUTHENTIK_ADMIN_GROUP", "media-admins"),
 	}
-	for key, dest := range map[string]*string{
-		"ADMIN_TOKEN": &c.AdminToken, "JELLYFIN_API_KEY": &c.JellyfinKey, "AUTHENTIK_TOKEN": &c.AuthentikToken,
+	for key, dest := range map[string]*bool{"JELLYFIN_ENABLED": &c.JellyfinEnabled, "AUTHENTIK_ENABLED": &c.AuthentikEnabled} {
+		value, err := strconv.ParseBool(env(key, "true"))
+		if err != nil {
+			return c, fmt.Errorf("%s must be true or false", key)
+		}
+		*dest = value
+	}
+	if !c.JellyfinEnabled && !c.AuthentikEnabled {
+		return c, fmt.Errorf("enable at least one account provisioning service")
+	}
+	secrets := map[string]*string{
+		"ADMIN_TOKEN":                  &c.AdminToken,
 		"AUTHENTIK_OIDC_CLIENT_SECRET": &c.OIDCClientSecret,
-	} {
+	}
+	urls := map[string]string{"BASE_URL": c.BaseURL, "AUTHENTIK_OIDC_ISSUER": c.OIDCIssuer}
+	if c.JellyfinEnabled {
+		secrets["JELLYFIN_API_KEY"] = &c.JellyfinKey
+		urls["JELLYFIN_URL"] = c.JellyfinURL
+		if err := json.Unmarshal([]byte(env("JELLYFIN_ALLOWED_LIBRARY_IDS", "null")), &c.JellyfinLibraryIDs); err != nil {
+			return c, fmt.Errorf("JELLYFIN_ALLOWED_LIBRARY_IDS must be a JSON array of library IDs or null")
+		}
+		for _, id := range c.JellyfinLibraryIDs {
+			if strings.TrimSpace(id) == "" {
+				return c, fmt.Errorf("JELLYFIN_ALLOWED_LIBRARY_IDS cannot contain empty IDs")
+			}
+		}
+		liveTV, err := strconv.ParseBool(env("JELLYFIN_ALLOW_LIVE_TV", "false"))
+		if err != nil {
+			return c, fmt.Errorf("JELLYFIN_ALLOW_LIVE_TV must be true or false")
+		}
+		c.JellyfinLiveTV = liveTV
+	}
+	if c.AuthentikEnabled {
+		secrets["AUTHENTIK_TOKEN"] = &c.AuthentikToken
+		urls["AUTHENTIK_URL"] = c.AuthentikURL
+	}
+	for key, dest := range secrets {
 		value, err := secret(key)
 		if err != nil {
 			return c, err
@@ -67,7 +105,7 @@ func loadConfig() (config, error) {
 	if c.OIDCClientID == "" {
 		return c, fmt.Errorf("AUTHENTIK_OIDC_CLIENT_ID is required")
 	}
-	for key, value := range map[string]string{"BASE_URL": c.BaseURL, "JELLYFIN_URL": c.JellyfinURL, "AUTHENTIK_URL": c.AuthentikURL, "AUTHENTIK_OIDC_ISSUER": c.OIDCIssuer} {
+	for key, value := range urls {
 		u, err := url.Parse(value)
 		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 			return c, fmt.Errorf("%s must be an absolute HTTP(S) URL without credentials, query, or fragment", key)
@@ -85,4 +123,15 @@ func loadConfig() (config, error) {
 		}
 	}
 	return c, nil
+}
+
+func (c config) services() []string {
+	services := []string{}
+	if c.AuthentikEnabled {
+		services = append(services, "authentik")
+	}
+	if c.JellyfinEnabled {
+		services = append(services, "jellyfin")
+	}
+	return services
 }

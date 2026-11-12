@@ -2,7 +2,7 @@
 
 A tiny service for inviting people to a media server. Create a single-use or reusable link;
 the recipient chooses a username, email, and password, and gets an account in
-**Jellyfin and Authentik**.
+**Jellyfin, Authentik, or both**, according to your configuration.
 
 - Admin login through **Authentik OIDC**, restricted to an admin group.
 - Optional expiry, reusable invitations, per-person signup history, and revocation.
@@ -10,7 +10,7 @@ the recipient chooses a username, email, and password, and gets an account in
 - One Go binary, embedded assets, and a small persistent JSON ledger.
 - Nix flake, NixOS module, systemd credentials, and optional nginx/ACME TLS.
 
-Both accounts initially receive the same password. This service provisions local
+When both services are enabled, accounts initially receive the same password. This service provisions local
 accounts; it does not configure Jellyfin SSO or synchronize later password changes.
 
 ## Authentik setup
@@ -60,10 +60,15 @@ or send invitation emails. Share invite links yourself.
 ## Jellyfin setup
 
 Create an API key in **Dashboard → API Keys**. New users are non-administrators,
-hidden from the public login screen, and allowed remote playback of all libraries.
-Content deletion and downloading are disabled. Other Jellyfin default policy
-settings are preserved. You can adjust an individual user's library access in
-Jellyfin after signup.
+hidden from the public login screen, and allowed remote playback. Set
+`jellyfin.allowedLibraryIds` to restrict them to particular library IDs. `null`
+(the default) allows all libraries; `[]` allows none. IDs are the `ItemId` values
+returned by Jellyfin's `/Library/VirtualFolders` endpoint.
+
+Live TV access defaults to disabled; set `jellyfin.allowLiveTv = true` to allow
+viewing. Live TV management, content deletion, and downloading are disabled.
+Other Jellyfin default policy settings are preserved. These settings apply to
+new signups; they do not modify existing users.
 
 ## Deploy on NixOS
 
@@ -84,11 +89,15 @@ services.ms-invite = {
   adminTokenFile = "/run/secrets/ms-invite-admin-token";
 
   jellyfin = {
+    enable = true;
     url = "http://127.0.0.1:8096";
     apiKeyFile = "/run/secrets/jellyfin-api-key";
+    allowedLibraryIds = [ "movies-library-id" "shows-library-id" ];
+    allowLiveTv = false;
   };
 
   authentik = {
+    enable = true;
     url = "https://auth.example.com";
     tokenFile = "/run/secrets/authentik-api-token";
     groups = [ "your-media-users-group-uuid" ];
@@ -120,6 +129,16 @@ timeout. `publicUrl` must exactly match the browser origin and have no path.
 
 `siteName` sets the admin header and browser page titles (`SITE_NAME` outside
 NixOS). Public pages have no header, and no pages include a footer.
+
+`jellyfin.enable` and `authentik.enable` independently control account provisioning;
+both default to `true`, and at least one must be enabled. Disabled services do not
+need API URLs or credentials and are never contacted for signup. Authentik OIDC
+is still required for **admin login**, even with Authentik provisioning disabled.
+For Jellyfin-only registration, set `authentik.enable = false`.
+
+Outside NixOS, use `JELLYFIN_ENABLED`, `AUTHENTIK_ENABLED`,
+`JELLYFIN_ALLOW_LIVE_TV`, and `JELLYFIN_ALLOWED_LIBRARY_IDS` (a JSON array or
+`null`). Signup pages automatically reflect the enabled services.
 
 Provision the four secret files with your preferred secret manager, or place
 root-readable files at persistent runtime paths such as `/var/lib/secrets/`:
@@ -235,6 +254,9 @@ transaction. The service records each step before continuing:
 - Revocation prevents further signup; it does not disable or delete provisioned
   accounts. A failure during final activation may leave one account active. Check
   both services when cleaning up a partial signup.
+- Each signup records its target services. If the enabled services change during
+  an incomplete signup, it stops for review instead of silently changing which
+  accounts it creates. Issue a new invitation after reviewing the partial accounts.
 
 This is designed for a small, single-instance service. A filesystem lock prevents
 two instances from sharing the same ledger; signup operations are serialized. A
@@ -245,6 +267,8 @@ with the upstream services. The ledger contains usernames and email addresses.
 Invite links are bearer credentials. The supplied nginx virtual host disables
 access logging; apply equivalent URL redaction/access controls to any other proxy
 logs. The app does not log request URLs, passwords, tokens, or upstream bodies.
+`robots.txt` disallows crawling, and all pages send `noindex, nofollow, noarchive`
+through both HTTP headers and HTML metadata.
 
 ## Checks
 

@@ -29,6 +29,7 @@ type invite struct {
 }
 
 type signupAttempt struct {
+	Services    []string   `json:"services"`
 	ID          string     `json:"id"`
 	SessionHash string     `json:"session_hash,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -111,8 +112,13 @@ func openStore(dir string) (*store, error) {
 							old.Status = "pending"
 						}
 						i.Signups = []signupAttempt{old}
-						s.rows[key] = i
 					}
+					for n := range i.Signups {
+						if len(i.Signups[n].Services) == 0 {
+							i.Signups[n].Services = []string{"authentik", "jellyfin"}
+						}
+					}
+					s.rows[key] = i
 				}
 			}
 		}

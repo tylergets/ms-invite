@@ -36,6 +36,8 @@ type fakeMedia struct {
 	jfNames                map[string]string
 	akPasswords            map[string]string
 	jfPasswords            map[string]string
+	calls                  []string
+	jfPolicy               map[string]any
 }
 
 func testApp(t *testing.T) (*app, *fakeMedia) {
@@ -56,6 +58,7 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 			t.Error("missing Jellyfin credential")
 		}
 		key := r.Method + " " + r.URL.Path
+		f.calls = append(f.calls, key)
 		if f.fail == key {
 			f.fail = ""
 			http.Error(w, "upstream failed", 503)
@@ -121,6 +124,7 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 		case "GET /jellyfin/Users/jf-user-id":
 			io.WriteString(w, `{"Policy":{"EnableAudioPlaybackTranscoding":true}}`)
 		case "POST /jellyfin/Users/jf-user-id/Policy":
+			f.jfPolicy = body
 			f.jfDisabled = body["IsDisabled"].(bool)
 			if body["IsAdministrator"] != false || body["EnableContentDeletion"] != false || body["EnableAudioPlaybackTranscoding"] != true {
 				t.Error("unsafe or lost policy")
@@ -136,7 +140,7 @@ func testApp(t *testing.T) (*app, *fakeMedia) {
 		}
 	}))
 	t.Cleanup(f.server.Close)
-	c := config{SiteName: "Ragtag Club", BaseURL: "https://invite.example.com", AdminToken: strings.Repeat("a", 32),
+	c := config{SiteName: "Ragtag Club", JellyfinEnabled: true, AuthentikEnabled: true, BaseURL: "https://invite.example.com", AdminToken: strings.Repeat("a", 32),
 		JellyfinURL: f.server.URL + "/jellyfin", JellyfinKey: "jf-key", AuthentikURL: f.server.URL + "/auth", AuthentikToken: "ak-key",
 		AuthentikPath: "users/media", OIDCAdminGroup: "media-admins"}
 	return newApp(c, testStore(t)), f

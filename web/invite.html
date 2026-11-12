@@ -1,19 +1,20 @@
 {{template "head" .}}
 <main id="main" class="signup-layout">
   <div class="signup-intro">
+    <div class="ticket-mark" aria-hidden="true"></div>
     <p class="section-label">Your invitation</p>
     <h1>Create your account.</h1>
-    <p class="intro-copy">A single signup for your media library and club services.</p>
+    <p class="intro-copy">{{if and .JellyfinEnabled .AuthentikEnabled}}A single signup for your media library and club services.{{else if .JellyfinEnabled}}Your own account for the media library.{{else}}Your account for club services.{{end}}</p>
     <dl class="service-list">
-      <div><dt>Jellyfin</dt><dd>Your movies, shows, and more.</dd></div>
-      <div><dt>Authentik</dt><dd>Your sign-in for club services.</dd></div>
+      {{if .JellyfinEnabled}}<div><dt>Jellyfin</dt><dd>Your movies, shows, and more.</dd></div>{{end}}
+      {{if .AuthentikEnabled}}<div><dt>Authentik</dt><dd>Your sign-in for club services.</dd></div>{{end}}
     </dl>
     <p class="invitation-expiry">{{if .Invite.ExpiresAt}}Accept by <time datetime="{{.Invite.ExpiresAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.Invite.ExpiresAt.Format "January 2, 2006 at 15:04"}} UTC</time>.{{else}}This invitation does not expire.{{end}}</p>
   </div>
 
   <section class="signup-form-section" aria-labelledby="account-heading">
     <h2 id="account-heading">Account details</h2>
-    <p class="form-intro">Use the same username and password for both services.</p>
+    {{if and .JellyfinEnabled .AuthentikEnabled}}<p class="form-intro">Use the same username and password for both services.</p>{{end}}
     {{if .Error}}<div class="notice notice-error" role="alert"><h3>Check your details</h3><p>{{.Error}}</p></div>{{end}}
     <form method="post" class="signup-form">
       <div class="field">

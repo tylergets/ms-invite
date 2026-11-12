@@ -44,6 +44,10 @@ func (a *app) handler() http.Handler {
 		a.render(w, "message.html", pageData{Title: "No invite found"})
 	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
+	mux.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Write([]byte("User-agent: *\nDisallow: /\n"))
+	})
 	mux.HandleFunc("GET /style.css", func(w http.ResponseWriter, r *http.Request) {
 		data, _ := assets.ReadFile("web/style.css")
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
@@ -68,23 +72,26 @@ func (a *app) handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
-		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
 		r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 		mux.ServeHTTP(w, r)
 	})
 }
 
 type pageData struct {
-	SiteName                    string
-	Title, Message, Error, Link string
-	Admin                       bool
-	Invite                      invite
-	Signup                      signupAttempt
-	Invites                     []invite
+	JellyfinEnabled, AuthentikEnabled bool
+	SiteName                          string
+	Title, Message, Error, Link       string
+	Admin                             bool
+	Invite                            invite
+	Signup                            signupAttempt
+	Invites                           []invite
 }
 
 func (a *app) render(w http.ResponseWriter, name string, data pageData) {
 	data.SiteName = a.config.SiteName
+	data.JellyfinEnabled = a.config.JellyfinEnabled
+	data.AuthentikEnabled = a.config.AuthentikEnabled
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := pages.ExecuteTemplate(w, name, data); err != nil {
 		slog.Error("render failed", "error", err)
@@ -292,5 +299,11 @@ func (a *app) accept(w http.ResponseWriter, r *http.Request) {
 	}
 	// The completed attempt remains immutable; another recipient starts fresh.
 	a.setCookie(w, "signup-"+i.ID, "", -1)
-	a.render(w, "message.html", pageData{Title: "Your account is ready.", Message: "Your Jellyfin and Authentik accounts are ready. Sign in with the username and password you just chose."})
+	message := "Your Jellyfin and Authentik accounts are ready."
+	if !a.config.AuthentikEnabled {
+		message = "Your Jellyfin account is ready."
+	} else if !a.config.JellyfinEnabled {
+		message = "Your Authentik account is ready."
+	}
+	a.render(w, "message.html", pageData{Title: "Your account is ready.", Message: message + " Sign in with the username and password you just chose."})
 }

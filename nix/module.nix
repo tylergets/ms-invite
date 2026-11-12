@@ -54,6 +54,21 @@ in
     };
 
     jellyfin = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Create Jellyfin accounts when an invitation is accepted.";
+      };
+      allowedLibraryIds = mkOption {
+        type = types.nullOr (types.listOf types.str);
+        default = null;
+        description = "Library IDs granted to new users. Null grants all libraries; an empty list grants none.";
+      };
+      allowLiveTv = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Allow new Jellyfin users to watch Live TV. Does not grant Live TV management.";
+      };
       url = mkOption {
         type = types.str;
         example = "http://127.0.0.1:8096";
@@ -66,6 +81,11 @@ in
     };
 
     authentik = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Create Authentik accounts when an invitation is accepted. Admin OIDC login remains enabled independently.";
+      };
       url = mkOption {
         type = types.str;
         example = "https://auth.example.com";
@@ -121,12 +141,18 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = lib.all (file: lib.hasPrefix "/" file && !(lib.hasPrefix "/nix/store/" file)) [
-          cfg.adminTokenFile
-          cfg.jellyfin.apiKeyFile
-          cfg.authentik.tokenFile
-          cfg.authentik.oidc.clientSecretFile
-        ];
+        assertion = cfg.jellyfin.enable || cfg.authentik.enable;
+        message = "ms-invite needs at least one account provisioning service enabled.";
+      }
+      {
+        assertion = lib.all (file: lib.hasPrefix "/" file && !(lib.hasPrefix "/nix/store/" file)) (
+          [
+            cfg.adminTokenFile
+            cfg.authentik.oidc.clientSecretFile
+          ]
+          ++ lib.optional cfg.jellyfin.enable cfg.jellyfin.apiKeyFile
+          ++ lib.optional cfg.authentik.enable cfg.authentik.tokenFile
+        );
         message = "ms-invite secrets must use absolute runtime paths outside the Nix store.";
       }
       {
@@ -156,16 +182,24 @@ in
         BASE_URL = cfg.publicUrl;
         DATA_DIR = "/var/lib/ms-invite";
         ADMIN_TOKEN_FILE = "%d/admin-token";
-        JELLYFIN_URL = cfg.jellyfin.url;
-        JELLYFIN_API_KEY_FILE = "%d/jellyfin-api-key";
-        AUTHENTIK_URL = cfg.authentik.url;
-        AUTHENTIK_TOKEN_FILE = "%d/authentik-token";
-        AUTHENTIK_GROUPS = lib.concatStringsSep "," cfg.authentik.groups;
-        AUTHENTIK_USER_PATH = cfg.authentik.userPath;
+        JELLYFIN_ENABLED = lib.boolToString cfg.jellyfin.enable;
+        AUTHENTIK_ENABLED = lib.boolToString cfg.authentik.enable;
         AUTHENTIK_OIDC_ISSUER = cfg.authentik.oidc.issuer;
         AUTHENTIK_OIDC_CLIENT_ID = cfg.authentik.oidc.clientId;
         AUTHENTIK_OIDC_CLIENT_SECRET_FILE = "%d/oidc-client-secret";
         AUTHENTIK_ADMIN_GROUP = cfg.authentik.oidc.adminGroup;
+      }
+      // lib.optionalAttrs cfg.jellyfin.enable {
+        JELLYFIN_URL = cfg.jellyfin.url;
+        JELLYFIN_API_KEY_FILE = "%d/jellyfin-api-key";
+        JELLYFIN_ALLOWED_LIBRARY_IDS = builtins.toJSON cfg.jellyfin.allowedLibraryIds;
+        JELLYFIN_ALLOW_LIVE_TV = lib.boolToString cfg.jellyfin.allowLiveTv;
+      }
+      // lib.optionalAttrs cfg.authentik.enable {
+        AUTHENTIK_URL = cfg.authentik.url;
+        AUTHENTIK_TOKEN_FILE = "%d/authentik-token";
+        AUTHENTIK_GROUPS = lib.concatStringsSep "," cfg.authentik.groups;
+        AUTHENTIK_USER_PATH = cfg.authentik.userPath;
       };
       serviceConfig = {
         ExecStart = lib.getExe cfg.package;
@@ -176,10 +210,10 @@ in
         UMask = "0077";
         LoadCredential = [
           "admin-token:${cfg.adminTokenFile}"
-          "jellyfin-api-key:${cfg.jellyfin.apiKeyFile}"
-          "authentik-token:${cfg.authentik.tokenFile}"
           "oidc-client-secret:${cfg.authentik.oidc.clientSecretFile}"
-        ];
+        ]
+        ++ lib.optional cfg.jellyfin.enable "jellyfin-api-key:${cfg.jellyfin.apiKeyFile}"
+        ++ lib.optional cfg.authentik.enable "authentik-token:${cfg.authentik.tokenFile}";
         Restart = "on-failure";
         RestartSec = 5;
         TimeoutStopSec = 110;

@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -64,12 +65,16 @@ func (a *app) provision(token, sessionKey, username, email, password string) err
 		link.Signups = append(link.Signups, signupAttempt{
 			ID: id, SessionHash: digest(sessionKey), CreatedAt: time.Now().UTC(),
 			Status: "pending", Username: username, Email: email,
+			Services: a.config.services(),
 		})
 		index = len(link.Signups) - 1
 	}
 	i := &link.Signups[index]
 	if i.Status == "used" {
 		return errors.New("this signup is already complete; open the invitation again to create another account")
+	}
+	if !slices.Equal(i.Services, a.config.services()) {
+		return errors.New("the available services changed after this signup started; contact your administrator for a new invitation")
 	}
 	if i.Creating != "" {
 		return errAttention
@@ -96,53 +101,60 @@ func (a *app) provision(token, sessionKey, username, email, password string) err
 		}
 		return errors.New("signup could not finish; please try again with the same username and email, or contact your administrator")
 	}
-	if i.AuthentikID == 0 {
-		i.Creating = "authentik"
-		if err := save(); err != nil {
+	akPath := ""
+	if a.config.AuthentikEnabled {
+		if i.AuthentikID == 0 {
+			i.Creating = "authentik"
+			if err := save(); err != nil {
+				return fail(err)
+			}
+			id, err := a.upstream.createAuthentik(ctx, link.ID, *i)
+			if err != nil {
+				return fail(err)
+			}
+			i.AuthentikID, i.Creating = id, ""
+			if err := save(); err != nil {
+				return fail(err)
+			}
+		}
+		akPath = fmt.Sprintf("/core/users/%d/", i.AuthentikID)
+		// Disable first on every retry, since a prior activation may have succeeded.
+		if err := a.upstream.call(ctx, "authentik", "PATCH", akPath, map[string]bool{"is_active": false}, nil); err != nil {
 			return fail(err)
 		}
-		id, err := a.upstream.createAuthentik(ctx, link.ID, *i)
-		if err != nil {
-			return fail(err)
-		}
-		i.AuthentikID, i.Creating = id, ""
-		if err := save(); err != nil {
-			return fail(err)
-		}
-	}
-	akPath := fmt.Sprintf("/core/users/%d/", i.AuthentikID)
-	// Disable first on every retry, since a prior activation may have succeeded.
-	if err := a.upstream.call(ctx, "authentik", "PATCH", akPath, map[string]bool{"is_active": false}, nil); err != nil {
-		return fail(err)
-	}
-	if err := a.upstream.call(ctx, "authentik", "POST", akPath+"set_password/", map[string]string{"password": password}, nil); err != nil {
-		return fail(err)
-	}
-	if i.JellyfinID == "" {
-		i.Creating = "jellyfin"
-		if err := save(); err != nil {
-			return fail(err)
-		}
-		id, err := a.upstream.createJellyfin(ctx, *i)
-		if err != nil {
-			return fail(err)
-		}
-		i.JellyfinID, i.Creating = id, ""
-		if err := save(); err != nil {
+		if err := a.upstream.call(ctx, "authentik", "POST", akPath+"set_password/", map[string]string{"password": password}, nil); err != nil {
 			return fail(err)
 		}
 	}
-	if err := a.upstream.jellyfinPolicy(ctx, i.JellyfinID, true); err != nil {
-		return fail(err)
+	if a.config.JellyfinEnabled {
+		if i.JellyfinID == "" {
+			i.Creating = "jellyfin"
+			if err := save(); err != nil {
+				return fail(err)
+			}
+			id, err := a.upstream.createJellyfin(ctx, *i)
+			if err != nil {
+				return fail(err)
+			}
+			i.JellyfinID, i.Creating = id, ""
+			if err := save(); err != nil {
+				return fail(err)
+			}
+		}
+		if err := a.upstream.jellyfinPolicy(ctx, i.JellyfinID, true); err != nil {
+			return fail(err)
+		}
+		if err := a.upstream.call(ctx, "jellyfin", "POST", "/Users/"+url.PathEscape(i.JellyfinID)+"/Password", map[string]any{"NewPw": password, "ResetPassword": false}, nil); err != nil {
+			return fail(err)
+		}
+		if err := a.upstream.jellyfinPolicy(ctx, i.JellyfinID, false); err != nil {
+			return fail(err)
+		}
 	}
-	if err := a.upstream.call(ctx, "jellyfin", "POST", "/Users/"+url.PathEscape(i.JellyfinID)+"/Password", map[string]any{"NewPw": password, "ResetPassword": false}, nil); err != nil {
-		return fail(err)
-	}
-	if err := a.upstream.jellyfinPolicy(ctx, i.JellyfinID, false); err != nil {
-		return fail(err)
-	}
-	if err := a.upstream.call(ctx, "authentik", "PATCH", akPath, map[string]bool{"is_active": true}, nil); err != nil {
-		return fail(err)
+	if a.config.AuthentikEnabled {
+		if err := a.upstream.call(ctx, "authentik", "PATCH", akPath, map[string]bool{"is_active": true}, nil); err != nil {
+			return fail(err)
+		}
 	}
 	i.Status, i.LastError = "used", ""
 	now := time.Now().UTC()

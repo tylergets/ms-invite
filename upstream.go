@@ -67,24 +67,28 @@ func (u *upstream) call(ctx context.Context, system, method, path string, body, 
 }
 
 func (u *upstream) available(ctx context.Context, username string) error {
-	var ak struct {
-		Results []struct {
-			Username string `json:"username"`
-		} `json:"results"`
-	}
-	if err := u.call(ctx, "authentik", "GET", "/core/users/?username="+url.QueryEscape(username), nil, &ak); err != nil {
-		return err
-	}
-	if len(ak.Results) > 0 {
-		return errUsernameTaken
-	}
-	var jf []struct{ Name string }
-	if err := u.call(ctx, "jellyfin", "GET", "/Users", nil, &jf); err != nil {
-		return err
-	}
-	for _, user := range jf {
-		if strings.EqualFold(user.Name, username) {
+	if u.config.AuthentikEnabled {
+		var ak struct {
+			Results []struct {
+				Username string `json:"username"`
+			} `json:"results"`
+		}
+		if err := u.call(ctx, "authentik", "GET", "/core/users/?username="+url.QueryEscape(username), nil, &ak); err != nil {
+			return err
+		}
+		if len(ak.Results) > 0 {
 			return errUsernameTaken
+		}
+	}
+	if u.config.JellyfinEnabled {
+		var jf []struct{ Name string }
+		if err := u.call(ctx, "jellyfin", "GET", "/Users", nil, &jf); err != nil {
+			return err
+		}
+		for _, user := range jf {
+			if strings.EqualFold(user.Name, username) {
+				return errUsernameTaken
+			}
 		}
 	}
 	return nil
@@ -137,10 +141,12 @@ func (u *upstream) jellyfinPolicy(ctx context.Context, id string, disabled bool)
 	for key, value := range map[string]bool{
 		"IsAdministrator": false, "IsHidden": true, "IsDisabled": disabled,
 		"EnableContentDeletion": false, "EnableContentDownloading": false,
-		"EnableAllFolders": true, "EnableRemoteAccess": true, "EnableMediaPlayback": true,
+		"EnableAllFolders": u.config.JellyfinLibraryIDs == nil, "EnableRemoteAccess": true, "EnableMediaPlayback": true,
+		"EnableLiveTvAccess": u.config.JellyfinLiveTV, "EnableLiveTvManagement": false,
 	} {
 		result.Policy[key] = value
 	}
 	result.Policy["EnableContentDeletionFromFolders"] = []string{}
+	result.Policy["EnabledFolders"] = append([]string{}, u.config.JellyfinLibraryIDs...)
 	return u.call(ctx, "jellyfin", "POST", path+"/Policy", result.Policy, nil)
 }

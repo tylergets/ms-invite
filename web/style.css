@@ -1,0 +1,33 @@
+:root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; color: #eeede8; background: #101413; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 15% 0%, #273b31 0%, transparent 55%); }
+.shell { max-width: 1000px; margin: auto; padding: 9vh 24px 32px; }
+.card { max-width: 500px; margin: auto; padding: 36px; border: 1px solid #35443b; border-radius: 20px; background: #181e1be8; }
+.wide { padding: 24px 0; }
+.eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .18em; color: #b6d4a6; }
+h1 { font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 550; line-height: 1.12; letter-spacing: -.045em; margin: 20px 0; }
+h2 { margin-top: 48px; font-size: 1.1rem; font-weight: 550; }
+p { line-height: 1.6; color: #aeb9b0; }
+label { display: block; font-size: .85rem; margin: 22px 0 8px; }
+input, select, button { font: inherit; border-radius: 8px; padding: 12px 14px; min-height: 46px; }
+input, select { width: 100%; border: 1px solid #455449; background: #111813; color: #eeede8; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid #b6d4a6; outline-offset: 3px; }
+small, .fine { color: #94a498; font-size: .76rem; line-height: 1.6; }
+small { display: inline-block; margin-top: 5px; }
+button { cursor: pointer; border: 1px solid transparent; background: #c2dcaf; color: #142011; font-weight: 650; }
+button:hover { background: #d7ecc7; }
+.card button { width: 100%; display: flex; justify-content: space-between; margin-top: 28px; }
+.notice { padding: 18px; border: 1px solid #637b56; background: #23331e; border-radius: 10px; margin: 24px 0; font-size: .9rem; }
+.error { color: #ffc2ae; }
+.notice.error { background: #39251e; border-color: #80513f; }
+.invite-link { margin-top: 12px; font-family: ui-monospace, monospace; font-size: .8rem; }
+.create-form { display: grid; grid-template-columns: 1fr 160px auto; align-items: end; gap: 16px; }
+.create-form label small { margin: 0; }
+.invite-row { border-top: 1px solid #344037; padding: 20px 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; overflow-wrap: anywhere; }
+.invite-row p { margin: 8px 0 0; }
+.badge { display: inline-block; font-size: .7rem; margin-left: 12px; padding: 3px 8px; border: 1px solid #455449; border-radius: 20px; color: #b6d4a6; }
+.secondary { background: transparent; border-color: #455449; color: #d3dbd5; font-size: .8rem; }
+.secondary:hover { background: #29352d; }
+.empty { padding: 28px 0; border-top: 1px solid #344037; }
+footer { text-align: center; margin-top: 32px; font-size: .7rem; color: #829386; }
+@media (max-width: 600px) { .shell { padding: 24px 16px; } .card { padding: 24px; } .create-form { grid-template-columns: 1fr; gap: 0; } .create-form button { margin-top: 24px; } .invite-row { align-items: start; } }

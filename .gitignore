@@ -1,0 +1,7 @@
+/result
+/result-*
+/ms-invite
+/data/
+/.env
+*.test
+coverage.out

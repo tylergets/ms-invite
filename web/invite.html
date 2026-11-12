@@ -1,0 +1,22 @@
+{{template "head" .}}
+<main class="card">
+  <p class="eyebrow">MEDIA SERVER · AN INVITATION</p>
+  <h1>{{.Title}}</h1>
+  <p>One signup. Your own account in Jellyfin and Authentik.</p>
+  {{if .Error}}<p class="notice error" role="alert">{{.Error}}</p>{{end}}
+  <form method="post">
+    <label for="username">Username</label>
+    <input id="username" name="username" value="{{.Invite.Username}}" autocomplete="username" pattern="[a-z0-9][a-z0-9_.\-]{2,31}" minlength="3" maxlength="32" required>
+    <small>3–32 lowercase letters, numbers, dots, underscores, or hyphens.</small>
+    <label for="email">Email address</label>
+    <input id="email" name="email" type="email" value="{{.Invite.Email}}" autocomplete="email" maxlength="254" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+    <small>At least 12 characters. Used for both accounts.</small>
+    <label for="password_confirm">Confirm password</label>
+    <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+    <button type="submit">Create my accounts <span aria-hidden="true">↗</span></button>
+  </form>
+  <p class="fine">This invitation is single-use. Account creation may take a moment.</p>
+</main>
+{{template "foot" .}}

@@ -1,0 +1,303 @@
+package main
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+func testStore(t *testing.T) *store {
+	t.Helper()
+	s, err := openStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.close() })
+	return s
+}
+
+type fakeMedia struct {
+	mu                     sync.Mutex
+	akCreated, jfCreated   int
+	akPassword, jfPassword string
+	akActive, jfDisabled   bool
+	fail, taken            string
+	server                 *httptest.Server
+}
+
+func testApp(t *testing.T) (*app, *fakeMedia) {
+	t.Helper()
+	f := &fakeMedia{}
+	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(r.URL.Path, "/auth/") {
+			if r.Header.Get("Authorization") != "Bearer ak-key" {
+				t.Error("missing Authentik credential")
+			}
+		} else if r.Header.Get("X-Emby-Token") != "jf-key" {
+			t.Error("missing Jellyfin credential")
+		}
+		key := r.Method + " " + r.URL.Path
+		if f.fail == key {
+			f.fail = ""
+			http.Error(w, "upstream failed", 503)
+			return
+		}
+		var body map[string]any
+		if r.Method != "GET" {
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("invalid body: %v", err)
+			}
+		}
+		switch key {
+		case "GET /auth/api/v3/core/users/":
+			if f.taken == "authentik" {
+				io.WriteString(w, `{"results":[{"username":"alice"}]}`)
+			} else {
+				io.WriteString(w, `{"results":[]}`)
+			}
+		case "GET /jellyfin/Users":
+			if f.taken == "jellyfin" {
+				io.WriteString(w, `[{"Name":"ALICE"}]`)
+			} else {
+				io.WriteString(w, `[]`)
+			}
+		case "POST /auth/api/v3/core/users/":
+			f.akCreated++
+			if body["is_active"] != false || body["username"] != "alice" {
+				t.Error("incorrect Authentik create")
+			}
+			io.WriteString(w, `{"pk":42}`)
+		case "PATCH /auth/api/v3/core/users/42/":
+			f.akActive = body["is_active"].(bool)
+			io.WriteString(w, `{}`)
+		case "POST /auth/api/v3/core/users/42/set_password/":
+			f.akPassword = body["password"].(string)
+			w.WriteHeader(204)
+		case "POST /jellyfin/Users/New":
+			f.jfCreated++
+			if len(body["Password"].(string)) < 32 {
+				t.Error("missing bootstrap password")
+			}
+			io.WriteString(w, `{"Id":"jf-user-id"}`)
+		case "GET /jellyfin/Users/jf-user-id":
+			io.WriteString(w, `{"Policy":{"EnableAudioPlaybackTranscoding":true}}`)
+		case "POST /jellyfin/Users/jf-user-id/Policy":
+			f.jfDisabled = body["IsDisabled"].(bool)
+			if body["IsAdministrator"] != false || body["EnableContentDeletion"] != false || body["EnableAudioPlaybackTranscoding"] != true {
+				t.Error("unsafe or lost policy")
+			}
+			w.WriteHeader(204)
+		case "POST /jellyfin/Users/jf-user-id/Password":
+			f.jfPassword = body["NewPw"].(string)
+			w.WriteHeader(204)
+		default:
+			t.Errorf("unexpected upstream request: %s", key)
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(f.server.Close)
+	c := config{BaseURL: "https://invite.example.com", AdminToken: strings.Repeat("a", 32),
+		JellyfinURL: f.server.URL + "/jellyfin", JellyfinKey: "jf-key", AuthentikURL: f.server.URL + "/auth", AuthentikToken: "ak-key",
+		AuthentikPath: "users/media", OIDCAdminGroup: "media-admins"}
+	return newApp(c, testStore(t)), f
+}
+
+func newInvite(t *testing.T, a *app) string {
+	t.Helper()
+	_, token, err := a.store.create("Test invite", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token
+}
+
+func signup(a *app, token string) *httptest.ResponseRecorder {
+	form := url.Values{"username": {"alice"}, "email": {"alice@example.com"}, "password": {"a good password 123"}, "password_confirm": {"a good password 123"}}
+	r := httptest.NewRequest("POST", "/invite/"+token, strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Origin", a.config.BaseURL)
+	w := httptest.NewRecorder()
+	a.handler().ServeHTTP(w, r)
+	return w
+}
+
+func TestSignupSingleUse(t *testing.T) {
+	a, f := testApp(t)
+	token := newInvite(t, a)
+	w := signup(a, token)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "accounts are ready") {
+		t.Fatalf("signup: %d %s", w.Code, w.Body.String())
+	}
+	if w = signup(a, token); w.Code != 410 {
+		t.Fatalf("replayed signup: %d", w.Code)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.akCreated != 1 || f.jfCreated != 1 || f.akPassword != f.jfPassword || !f.akActive || f.jfDisabled {
+		t.Fatalf("incorrect final state: %+v", f)
+	}
+	data, err := os.ReadFile(filepath.Join(a.store.dir, "invites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), token) || strings.Contains(string(data), f.akPassword) {
+		t.Fatal("capability or password persisted")
+	}
+}
+
+func TestRetryKnownPartialAccounts(t *testing.T) {
+	a, f := testApp(t)
+	token := newInvite(t, a)
+	f.fail = "POST /jellyfin/Users/jf-user-id/Password"
+	if w := signup(a, token); w.Code != 400 {
+		t.Fatalf("expected retryable failure, got %d", w.Code)
+	}
+	i, err := a.store.get(token)
+	if err != nil || i.JellyfinID == "" || i.AuthentikID == 0 || i.Creating != "" {
+		t.Fatalf("partial state lost: %+v, %v", i, err)
+	}
+	// Also exercise a process restart between attempts.
+	dir := a.store.dir
+	a.store.close()
+	a.store, err = openStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.store.close() })
+	if w := signup(a, token); w.Code != 200 {
+		t.Fatalf("retry failed: %s", w.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.akCreated != 1 || f.jfCreated != 1 {
+		t.Fatal("retry created duplicate accounts")
+	}
+}
+
+func TestAmbiguousCreateRequiresAttention(t *testing.T) {
+	a, f := testApp(t)
+	token := newInvite(t, a)
+	f.fail = "POST /jellyfin/Users/New"
+	if w := signup(a, token); !strings.Contains(w.Body.String(), "administrator attention") {
+		t.Fatal(w.Body.String())
+	}
+	i, err := a.store.get(token)
+	if err != nil || i.Creating != "jellyfin" {
+		t.Fatalf("missing intent: %+v %v", i, err)
+	}
+	if w := signup(a, token); w.Code != 400 {
+		t.Fatal("ambiguous create retried")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.jfCreated != 0 {
+		t.Fatal("created after ambiguous failure")
+	}
+}
+
+func TestExistingAccountsAreNeverAdopted(t *testing.T) {
+	for _, system := range []string{"authentik", "jellyfin"} {
+		t.Run(system, func(t *testing.T) {
+			a, f := testApp(t)
+			f.taken = system
+			if w := signup(a, newInvite(t, a)); w.Code != 400 || !strings.Contains(w.Body.String(), "already taken") {
+				t.Fatal(w.Body.String())
+			}
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.akCreated != 0 || f.jfCreated != 0 || f.akPassword != "" || f.jfPassword != "" {
+				t.Fatal("existing account modified")
+			}
+		})
+	}
+}
+
+func TestStoreExpiryRevocationAndLock(t *testing.T) {
+	s := testStore(t)
+	if second, err := openStore(s.dir); err == nil {
+		second.close()
+		t.Fatal("second process acquired ledger")
+	}
+	_, expired, err := s.create("expired", -time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.get(expired); err == nil {
+		t.Fatal("expired invite accepted")
+	}
+	i, token, err := s.create("revoked", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.revoke(i.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.get(token); err == nil {
+		t.Fatal("revoked invite accepted")
+	}
+}
+
+func TestAdminAuthorizationAndCSRF(t *testing.T) {
+	a, _ := testApp(t)
+	for _, tc := range []struct {
+		name, path, origin, bearer string
+		session                    bool
+		want                       int
+	}{
+		{"api unauthenticated", "/api/invites", "", "", false, 401},
+		{"api token", "/api/invites", "", a.config.AdminToken, false, 201},
+		{"api cross origin", "/api/invites", "https://evil.example", a.config.AdminToken, false, 403},
+		{"browser no session", "/admin/invites", a.config.BaseURL, a.config.AdminToken, false, 303},
+		{"browser no origin", "/admin/invites", "", "", true, 403},
+		{"browser cross origin", "/admin/invites", "https://evil.example", "", true, 403},
+		{"browser authenticated", "/admin/invites", a.config.BaseURL, "", true, 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"label":"hello","expires_in_hours":24}`
+			if tc.session {
+				body = "label=hello&expires_in_hours=24"
+			}
+			r := httptest.NewRequest("POST", tc.path, strings.NewReader(body))
+			r.Header.Set("Origin", tc.origin)
+			r.Header.Set("Authorization", "Bearer "+tc.bearer)
+			if tc.session {
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.AddCookie(&http.Cookie{Name: a.cookieName("session"), Value: a.signCookie("session", adminSession{Subject: "admin", Group: a.config.OIDCAdminGroup, Expires: time.Now().Add(time.Hour).Unix()})})
+			}
+			w := httptest.NewRecorder()
+			a.handler().ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("got %d want %d: %s", w.Code, tc.want, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestConcurrentSignupRejected(t *testing.T) {
+	a, _ := testApp(t)
+	token := newInvite(t, a)
+	a.provisionMu.Lock()
+	defer a.provisionMu.Unlock()
+	if w := signup(a, token); w.Code != 503 {
+		t.Fatalf("concurrent signup: %d", w.Code)
+	}
+}
+
+func TestPasswordValidation(t *testing.T) {
+	for _, password := range []string{"short", " padded password ", "password\nwith newline", strings.Repeat("x", 129)} {
+		if err := validateSignup("alice", "alice@example.com", password); err == nil {
+			t.Fatalf("accepted %q", password)
+		}
+	}
+}

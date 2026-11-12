@@ -1,0 +1,34 @@
+{{template "head" .}}
+<main class="wide">
+  <p class="eyebrow">MEDIA SERVER · INVITES</p>
+  <form method="post" action="/auth/logout"><button type="submit" class="secondary">Sign out</button></form>
+  <h1>{{.Title}}</h1>
+  <p>A personal link. A place in your media library.</p>
+  {{if .Link}}
+  <section class="notice" aria-label="New invite link">
+    <strong>Copy this link now — it is only shown once.</strong>
+    <input class="invite-link" aria-label="Invite link" readonly value="{{.Link}}">
+  </section>
+  {{end}}
+  <form method="post" action="/admin/invites" class="create-form">
+    <div><label for="label">Label <small>(just for you)</small></label><input id="label" name="label" placeholder="Movie night crew" maxlength="120"></div>
+    <div><label for="expiry">Expires in</label><select id="expiry" name="expires_in_hours"><option value="24">24 hours</option><option value="168" selected>7 days</option><option value="720">30 days</option></select></div>
+    <button type="submit">Create invite ↗</button>
+  </form>
+  <h2>Your invitations</h2>
+  <div class="invites">
+  {{range .Invites}}
+    <article class="invite-row">
+      <div><strong>{{if .Label}}{{.Label}}{{else}}Untitled invite{{end}}</strong><span class="badge">{{.Status}}</span>
+        <p class="fine">Expires {{.ExpiresAt.Format "02 Jan 2006, 15:04 UTC"}}{{if .Username}} · {{.Username}}{{end}}</p>
+        {{if .LastError}}<p class="fine error">{{.LastError}}</p>{{end}}
+        {{if .Creating}}<p class="fine error">Uncertain {{.Creating}} account creation. Review upstream accounts before issuing a replacement invite.</p>{{end}}
+        {{if .AuthentikID}}<p class="fine">Authentik ID: {{.AuthentikID}}{{if .JellyfinID}} · Jellyfin ID: {{.JellyfinID}}{{end}}</p>{{end}}
+      </div>
+      {{if and (ne .Status "used") (ne .Status "revoked")}}<form method="post" action="/admin/invites/{{.ID}}/revoke"><button class="secondary" type="submit">Revoke</button></form>{{end}}
+    </article>
+  {{else}}<p class="empty">No invitations yet. Make someone's next movie night.</p>{{end}}
+  </div>
+  <p class="fine">Revoking an invite stops signup. It does not delete accounts already created.</p>
+</main>
+{{template "foot" .}}
